@@ -56,6 +56,7 @@ UITests/              XCUITest end-to-end suite
 project.yml           XcodeGen spec
 .github/workflows/    CI
 docs/adr/             architecture decision records
+docs/performance/     committed performance baseline
 docs/solutions/       lessons captured after each step
 plans/                one plan per step
 scripts/              repository checks

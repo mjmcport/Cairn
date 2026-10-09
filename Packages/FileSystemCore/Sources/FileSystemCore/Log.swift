@@ -22,6 +22,11 @@ public enum Log {
   /// Main-thread violations, hangs and crash reports.
   public static let diagnostics = Logger(subsystem: subsystem, category: "diagnostics")
 
+  /// Signpost intervals for Instruments and for performance tests, in the
+  /// category `performance`.
+  public static let signposter = OSSignposter(subsystem: subsystem, category: performanceCategory)
+  public static let performanceCategory = "performance"
+
   /// Every category name, for tests and documentation.
   public static let categories = [
     "filesystem", "metadata", "operations", "ui", "lifecycle", "diagnostics",

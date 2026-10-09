@@ -22,6 +22,13 @@ let package = Package(
         .product(name: "TestSupport", package: "TestSupport"),
       ]
     ),
+    .testTarget(
+      name: "FileSystemCorePerformanceTests",
+      dependencies: [
+        "FileSystemCore",
+        .product(name: "TestSupport", package: "TestSupport"),
+      ]
+    ),
   ],
   swiftLanguageModes: [.v6]
 )

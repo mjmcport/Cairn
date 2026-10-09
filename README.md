@@ -41,6 +41,7 @@ The individual tasks:
 | `make build` | Builds the app |
 | `make test` | Runs the unit tests of every package, the script tests and the project-spec checks |
 | `make uitest` | Runs the end-to-end tests |
+| `make perf` | Runs the performance tests and compares them with `docs/performance/baseline.json` |
 | `make lint` | Checks the governance files and Swift formatting |
 | `make clean-clone` | Proves a clean copy builds and tests with one command |
 

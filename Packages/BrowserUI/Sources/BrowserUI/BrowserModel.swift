@@ -1,5 +1,6 @@
 import FileSystemCore
 import Foundation
+import os
 
 /// The state of one browser: where it is and what it shows. The view
 /// controller draws this and forwards user actions to it.
@@ -34,8 +35,15 @@ public final class BrowserModel {
     self.reader = reader
   }
 
+  /// The signpost interval that covers a load, from the request until the
+  /// view has been told about the result.
+  public static let loadSignpostName: StaticString = "LoadFolder"
+
   /// Lists the current folder and publishes the result.
   public func load() async {
+    let interval = Log.signposter.beginInterval(Self.loadSignpostName)
+    defer { Log.signposter.endInterval(Self.loadSignpostName, interval) }
+
     generation += 1
     let current = generation
     let folder = location

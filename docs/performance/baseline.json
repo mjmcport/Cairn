@@ -1,0 +1,103 @@
+{
+  "recorded": "2026-10-09T19:46:25Z",
+  "machine": {
+    "model": "Mac16,13",
+    "chip": "Apple M4",
+    "cores": "10",
+    "memoryGB": 16,
+    "macOS": "27.0"
+  },
+  "results": {
+    "ListingPerformanceTests.testDetailMetadata10000": {
+      "metric": "Clock Monotonic Time",
+      "unit": "s",
+      "average": 0.428,
+      "relativeStandardDeviationPercent": 7.167,
+      "values": [
+        0.46099,
+        0.451262,
+        0.39905,
+        0.383284,
+        0.443133
+      ]
+    },
+    "ListingPerformanceTests.testDetailMetadata100000": {
+      "metric": "Clock Monotonic Time",
+      "unit": "s",
+      "average": 5.405,
+      "relativeStandardDeviationPercent": 7.112,
+      "values": [
+        5.069238,
+        5.579291,
+        6.039079,
+        5.368458,
+        4.96667
+      ]
+    },
+    "ListingPerformanceTests.testList10000": {
+      "metric": "Clock Monotonic Time",
+      "unit": "s",
+      "average": 0.054,
+      "relativeStandardDeviationPercent": 2.795,
+      "values": [
+        0.056135,
+        0.055242,
+        0.052346,
+        0.053225,
+        0.052602
+      ]
+    },
+    "ListingPerformanceTests.testList100000": {
+      "metric": "Clock Monotonic Time",
+      "unit": "s",
+      "average": 0.502,
+      "relativeStandardDeviationPercent": 0.498,
+      "values": [
+        0.502273,
+        0.497594,
+        0.503133,
+        0.503067,
+        0.505094
+      ]
+    },
+    "ListingPerformanceTests.testSortByName10000": {
+      "metric": "Clock Monotonic Time",
+      "unit": "s",
+      "average": 0.144,
+      "relativeStandardDeviationPercent": 0.627,
+      "values": [
+        0.144699,
+        0.144939,
+        0.143812,
+        0.142662,
+        0.142986
+      ]
+    },
+    "ListingPerformanceTests.testSortByName100000": {
+      "metric": "Clock Monotonic Time",
+      "unit": "s",
+      "average": 1.985,
+      "relativeStandardDeviationPercent": 1.874,
+      "values": [
+        2.033344,
+        2.00835,
+        1.928876,
+        1.998091,
+        1.95824
+      ]
+    },
+    "PerformanceTests.testTimeToFirstRows10000": {
+      "metric": "Duration (LoadFolder)",
+      "unit": "s",
+      "average": 0.266,
+      "relativeStandardDeviationPercent": 1.438,
+      "values": [
+        0.267389,
+        0.261932,
+        0.269199,
+        0.260159,
+        0.269303
+      ]
+    }
+  }
+}
