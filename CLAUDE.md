@@ -85,10 +85,10 @@ Three macOS versions matter: the CI runner is macOS 26 (runner label `macos-26`)
 
 ## Status
 
-Phase 0 is complete (12 steps, one commit each). Its plans are in `plans/` and its lessons in `docs/solutions/`. The Phase 0 follow-up (`plans/phase-0-follow-up.md`) closes it out. Phase 1 (Finder-replacement core) is next, on branches and pull requests.
+Phase 0 is complete (12 steps, one commit each). Its plans are in `plans/` and its lessons in `docs/solutions/`. The Phase 0 follow-up (`plans/phase-0-follow-up.md`) closes it out. Phase 1 (Finder-replacement core) is next, on branches and pull requests. Its first milestone is planned in `plans/phase-1a-browse.md`, which also holds the Phase 1 exit requirements.
 
 ## Open items
 
 - Branch protection on `main` is not enabled: GitHub's free plan refuses it on a private repository. Run `scripts/protect-main.sh` after upgrading to GitHub Pro or making the repository public.
 - Confirm the bundle ID before the first signed build.
-- Apple Developer Program membership is needed by the end of Phase 1, not for Phase 0.
+- Apple Developer Program membership is needed by the end of Phase 1, not for Phase 0. Developer ID signing and notarization are Phase 1 exit requirements (`plans/phase-1a-browse.md`); until then the CI build is signed ad hoc and is not a release.
