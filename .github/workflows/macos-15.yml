@@ -1,0 +1,74 @@
+name: macOS 15
+
+# The minimum supported macOS, built and tested once a week. It also runs on a
+# pull request that changes this file or the Xcode selection script, because
+# workflow_dispatch only works once the workflow is on the default branch.
+on:
+  schedule:
+    - cron: "23 5 * * 1"
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - .github/workflows/macos-15.yml
+      - scripts/ci-select-xcode.sh
+
+concurrency:
+  group: macos-15-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Build and test on macOS 15
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - name: Record the start time
+        run: echo "CI_STARTED=$(date +%s)" >> "$GITHUB_ENV"
+
+      - uses: actions/checkout@v4
+
+      # Strict: the runner's default Xcode is older than the pinned major
+      # version, so no Xcode of that version is a failure, not a fallback.
+      - name: Select Xcode
+        run: scripts/ci-select-xcode.sh --strict >> "$GITHUB_ENV"
+
+      # Read these before trusting a green run.
+      - name: Report versions
+        run: |
+          {
+            echo '### macOS 15 check'
+            echo
+            echo "- macOS: $(sw_vers -productVersion) ($(sw_vers -buildVersion))"
+            echo "- Xcode: $(xcodebuild -version | tr '\n' ' ')"
+            echo "- Swift: $(xcrun swift --version 2>&1 | sed -n 1p)"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Bootstrap
+        run: make bootstrap
+
+      - name: Build
+        run: make build
+
+      - name: Unit tests
+        run: make test
+
+      - name: UI tests
+        id: uitest
+        run: make uitest
+
+      - name: Upload test results
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-macos-15
+          path: build/DerivedData/Logs/Test
+          if-no-files-found: ignore
+          retention-days: 7
+
+      # Also prints what a weekly run costs in a month, and warns past the limit.
+      - name: Duration
+        if: always()
+        run: scripts/ci-duration.sh --weekly "$CI_STARTED"

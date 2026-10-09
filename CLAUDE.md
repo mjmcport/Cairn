@@ -47,6 +47,7 @@ Read `docs/solutions/` before planning a step.
 - Never start a new step or push on top of a red CI run. After each push, wait for CI with `gh run watch` and fix a red run before continuing.
 - Commit after every step. Push at milestones, not after every commit.
 - Starting in Phase 1, work on a branch and open a pull request. Merge only when CI is green, so `main` stays green.
+- A weekly workflow, `.github/workflows/macos-15.yml`, builds the app and runs the unit and UI tests on a macOS 15 runner. Treat a red weekly run like red CI: fix it before starting a new step. If it is unstable or its cost passes about 300 billed minutes a month, tell the user; do not drop a test to fix either.
 
 ## Repository layout
 
@@ -60,7 +61,7 @@ Packages/
   TestSupport/        fixture-tree builder and test helpers
 UITests/              XCUITest end-to-end suite
 project.yml           XcodeGen spec
-.github/workflows/    CI
+.github/workflows/    CI, and the weekly macOS 15 check
 docs/adr/             architecture decision records
 docs/performance/     committed performance baseline
 docs/solutions/       lessons captured after each step
