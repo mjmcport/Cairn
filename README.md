@@ -33,7 +33,7 @@ The individual tasks:
 | `make bootstrap` | Checks Xcode, its license and components, and installs XcodeGen |
 | `make generate` | Creates `Cairn.xcodeproj` from `project.yml` |
 | `make build` | Builds the app |
-| `make test` | Runs the script tests and the project-spec checks |
+| `make test` | Runs the unit tests of every package, the script tests and the project-spec checks |
 | `make uitest` | Runs the end-to-end tests |
 | `make lint` | Checks the governance files and Swift formatting |
 | `make clean-clone` | Proves a clean copy builds and tests with one command |

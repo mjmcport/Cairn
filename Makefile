@@ -10,7 +10,8 @@ export DEVELOPER_DIR
 PROJECT := Cairn.xcodeproj
 DERIVED_DATA := build/DerivedData
 DESTINATION := platform=macOS,arch=arm64
-SWIFT_SOURCES := App UITests
+SWIFT_SOURCES := App UITests Packages
+PACKAGES := TestSupport FileSystemCore FileMetadata FileOperations BrowserUI
 
 XCODEBUILD := xcodebuild -project $(PROJECT) -destination '$(DESTINATION)' \
 	-derivedDataPath $(DERIVED_DATA)
@@ -28,10 +29,16 @@ generate: ## Create Cairn.xcodeproj from project.yml
 build: generate ## Build the app (Debug)
 	$(XCODEBUILD) -scheme Cairn -configuration Debug build
 
-test: generate ## Run the script tests and the project-spec checks
+test: generate ## Run the script tests, the project-spec checks and every package's unit tests
 	scripts/test-check-governance.sh
 	scripts/test-bootstrap.sh
 	scripts/check-project-spec.sh
+	scripts/test-check-appkit-boundary.sh
+	scripts/check-appkit-boundary.sh
+	@set -e; for package in $(PACKAGES); do \
+		echo "== $$package"; \
+		xcrun swift test --package-path Packages/$$package --scratch-path build/packages/$$package; \
+	done
 
 uitest: generate ## Run the end-to-end tests
 	$(XCODEBUILD) -scheme CairnUITests test

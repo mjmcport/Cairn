@@ -1,7 +1,8 @@
 import AppKit
+import BrowserUI
 
-/// The application entry point. Phase 0 step 2 opens one empty window; the
-/// browser arrives with the walking skeleton in step 5.
+/// The application entry point. Opens one window that hosts a browser on the
+/// home folder; the list view arrives with the walking skeleton in step 5.
 @main
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
@@ -24,6 +25,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       backing: .buffered,
       defer: false
     )
+    window.contentViewController = BrowserViewController(
+      location: FileManager.default.homeDirectoryForCurrentUser)
+    window.setContentSize(NSSize(width: 900, height: 600))
     window.title = "Cairn"
     window.identifier = NSUserInterfaceItemIdentifier("main-window")
     window.isReleasedWhenClosed = false

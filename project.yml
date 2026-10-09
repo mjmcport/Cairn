@@ -26,12 +26,18 @@ settings:
     SWIFT_TREAT_WARNINGS_AS_ERRORS: YES
     GCC_TREAT_WARNINGS_AS_ERRORS: YES
 
+packages:
+  BrowserUI:
+    path: Packages/BrowserUI
+
 targets:
   Cairn:
     type: application
     platform: macOS
     sources:
       - path: App
+    dependencies:
+      - package: BrowserUI
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.mjmcport.cairn
