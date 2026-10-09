@@ -65,4 +65,28 @@ expect $network fail "network: rejects a web view"
 make_tree; echo 'let s = URLSession.shared' > "$work/tree/Packages/FileSystemCore/Tests/FileSystemCoreTests/T.swift"
 expect $network pass "network: ignores test targets"
 
+accessibility=check-accessibility.sh
+ui_dir="$work/tree/Packages/BrowserUI/Sources/BrowserUI"
+make_ui_tree() {
+    make_tree
+    mkdir -p "$ui_dir"
+    echo 'view.setAccessibilityIdentifier(element.identifier)' > "$ui_dir/Accessibility.swift"
+    echo 'tableView.apply(.fileList)' > "$ui_dir/View.swift"
+}
+
+make_ui_tree
+expect $accessibility pass "accessibility: allows the helper file and apply(_:)"
+
+make_ui_tree; echo 'button.setAccessibilityIdentifier("ok")' >> "$ui_dir/View.swift"
+expect $accessibility fail "accessibility: rejects a direct identifier in BrowserUI"
+
+make_ui_tree; echo 'button.setAccessibilityLabel("OK")' >> "$work/tree/App/AppDelegate.swift"
+expect $accessibility fail "accessibility: rejects a direct label in the app"
+
+make_ui_tree; echo 'window.identifier = NSUserInterfaceItemIdentifier("main")' >> "$work/tree/App/AppDelegate.swift"
+expect $accessibility fail "accessibility: rejects a literal view identifier"
+
+make_ui_tree; echo '// never call setAccessibilityLabel( directly' >> "$ui_dir/View.swift"
+expect $accessibility pass "accessibility: ignores a comment"
+
 exit "$failed"

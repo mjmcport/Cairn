@@ -1,3 +1,4 @@
+import BrowserUI
 import TestSupport
 import XCTest
 
@@ -36,7 +37,7 @@ final class BrowsingTests: XCTestCase {
   @MainActor
   private func launch(on folder: URL) -> XCUIElement {
     launchApp(arguments: ["-OpenFolder", folder.path])
-    let table = app.tables["file-list"]
+    let table = app.tables[AccessibilityElement.fileList.identifier]
     XCTAssertTrue(table.waitForExistence(timeout: 10), "The file list did not appear")
     return table
   }
@@ -58,7 +59,8 @@ final class BrowsingTests: XCTestCase {
     XCTAssertTrue(table.staticTexts["beta.txt"].exists)
     XCTAssertTrue(table.staticTexts["Sub"].exists)
     XCTAssertFalse(table.staticTexts[".secret"].exists)
-    XCTAssertEqual(app.windows["main-window"].title, tree.root.lastPathComponent)
+    XCTAssertEqual(
+      app.windows[AccessibilityElement.mainWindow.identifier].title, tree.root.lastPathComponent)
   }
 
   @MainActor
@@ -69,11 +71,12 @@ final class BrowsingTests: XCTestCase {
     table.staticTexts["Sub"].doubleClick()
     waitForRowCount(1, in: table, "Expected only inner.txt inside Sub")
     XCTAssertTrue(table.staticTexts["inner.txt"].exists)
-    XCTAssertEqual(app.windows["main-window"].title, "Sub")
+    XCTAssertEqual(app.windows[AccessibilityElement.mainWindow.identifier].title, "Sub")
 
     app.typeKey(.upArrow, modifierFlags: .command)
     waitForRowCount(3, in: table, "Expected three rows after returning")
-    XCTAssertEqual(app.windows["main-window"].title, tree.root.lastPathComponent)
+    XCTAssertEqual(
+      app.windows[AccessibilityElement.mainWindow.identifier].title, tree.root.lastPathComponent)
   }
 
   @MainActor
@@ -83,16 +86,17 @@ final class BrowsingTests: XCTestCase {
 
     table.staticTexts["alpha.txt"].doubleClick()
     waitForRowCount(3, in: table, "A file must not navigate")
-    XCTAssertEqual(app.windows["main-window"].title, tree.root.lastPathComponent)
+    XCTAssertEqual(
+      app.windows[AccessibilityElement.mainWindow.identifier].title, tree.root.lastPathComponent)
   }
 
   @MainActor
   func testAMissingFolderShowsWhyItCouldNotBeListed() {
     launchApp(arguments: ["-OpenFolder", tree.path("does-not-exist")])
 
-    let status = app.staticTexts["browser-status"]
+    let status = app.staticTexts[AccessibilityElement.browserStatus.identifier]
     XCTAssertTrue(status.waitForExistence(timeout: 10), "No explanation was shown")
     XCTAssertFalse((status.value as? String ?? "").isEmpty)
-    XCTAssertEqual(app.tables["file-list"].tableRows.count, 0)
+    XCTAssertEqual(app.tables[AccessibilityElement.fileList.identifier].tableRows.count, 0)
   }
 }

@@ -1,3 +1,4 @@
+import BrowserUI
 import TestSupport
 import XCTest
 
@@ -27,7 +28,7 @@ final class PerformanceTests: XCTestCase {
     app.launch()
     addTeardownBlock { @MainActor in app.terminate() }
 
-    let table = app.tables["file-list"]
+    let table = app.tables[AccessibilityElement.fileList.identifier]
     let folder = table.staticTexts["Items10000"]
     XCTAssertTrue(folder.waitForExistence(timeout: 10))
 

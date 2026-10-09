@@ -18,6 +18,23 @@ public final class BrowserViewController: NSViewController {
       }
     }
 
+    var accessibility: AccessibilityElement {
+      switch self {
+      case .name: .nameCell
+      case .size: .sizeCell
+      case .modified: .modifiedCell
+      }
+    }
+
+    /// What VoiceOver says in place of the dashes shown for a missing value.
+    var missingValueSpokenText: String {
+      switch self {
+      case .name: "No name"
+      case .size: "No size"
+      case .modified: "No date"
+      }
+    }
+
     var width: CGFloat {
       switch self {
       case .name: 420
@@ -49,7 +66,7 @@ public final class BrowserViewController: NSViewController {
 
   public override func loadView() {
     let container = NSView(frame: NSRect(x: 0, y: 0, width: 900, height: 600))
-    container.identifier = NSUserInterfaceItemIdentifier("browser-view")
+    container.applyIdentifier(of: .browserView)
 
     for column in Column.allCases {
       let tableColumn = NSTableColumn(identifier: column.identifier)
@@ -58,9 +75,7 @@ public final class BrowserViewController: NSViewController {
       tableColumn.minWidth = 60
       tableView.addTableColumn(tableColumn)
     }
-    tableView.identifier = NSUserInterfaceItemIdentifier("file-list")
-    tableView.setAccessibilityIdentifier("file-list")
-    tableView.setAccessibilityLabel("Files")
+    tableView.apply(.fileList)
     tableView.style = .fullWidth
     tableView.usesAlternatingRowBackgroundColors = true
     tableView.allowsMultipleSelection = true
@@ -74,10 +89,10 @@ public final class BrowserViewController: NSViewController {
     scrollView.hasHorizontalScroller = true
     scrollView.translatesAutoresizingMaskIntoConstraints = false
 
-    statusLabel.identifier = NSUserInterfaceItemIdentifier("browser-status")
-    statusLabel.setAccessibilityIdentifier("browser-status")
+    statusLabel.applyIdentifier(of: .browserStatus)
     statusLabel.alignment = .center
-    statusLabel.textColor = .secondaryLabelColor
+    // Primary label color: the secondary color fails the contrast audit.
+    statusLabel.textColor = .labelColor
     statusLabel.isHidden = true
     statusLabel.translatesAutoresizingMaskIntoConstraints = false
 
@@ -167,13 +182,16 @@ public final class BrowserViewController: NSViewController {
     location.path == "/" ? "/" : location.lastPathComponent
   }
 
+  /// Shown where an item has no value, as Finder does for a folder's size.
+  static let missingValueText = "--"
+
   static func sizeText(for item: FileItem) -> String {
-    guard let size = item.size else { return "--" }
+    guard let size = item.size else { return missingValueText }
     return size.formatted(.byteCount(style: .file))
   }
 
   static func modifiedText(for item: FileItem) -> String {
-    guard let date = item.modificationDate else { return "--" }
+    guard let date = item.modificationDate else { return missingValueText }
     return date.formatted(date: .abbreviated, time: .shortened)
   }
 }
@@ -192,7 +210,8 @@ extension BrowserViewController: NSTableViewDataSource, NSTableViewDelegate {
     else { return nil }
     let item = model.items[row]
 
-    let cellIdentifier = NSUserInterfaceItemIdentifier("cell-\(column.rawValue)")
+    // A reuse identifier for the table's cell cache, not an accessibility identity.
+    let cellIdentifier = NSUserInterfaceItemIdentifier(rawValue: "cell-\(column.rawValue)")
     let cell =
       tableView.makeView(withIdentifier: cellIdentifier, owner: self) as? NSTableCellView
       ?? Self.makeCell(identifier: cellIdentifier, column: column)
@@ -204,6 +223,10 @@ extension BrowserViewController: NSTableViewDataSource, NSTableViewDelegate {
       case .modified: Self.modifiedText(for: item)
       }
     cell.textField?.stringValue = text
+    // Dashes are not words, so both the cell and its text get a spoken replacement.
+    let spokenText = text == Self.missingValueText ? column.missingValueSpokenText : nil
+    cell.setSpokenText(spokenText)
+    cell.textField?.setSpokenText(spokenText)
     return cell
   }
 
@@ -215,7 +238,7 @@ extension BrowserViewController: NSTableViewDataSource, NSTableViewDelegate {
     let label = NSTextField(labelWithString: "")
     label.lineBreakMode = column == .name ? .byTruncatingMiddle : .byTruncatingTail
     label.alignment = column == .size ? .right : .natural
-    label.setAccessibilityIdentifier("\(column.rawValue)-text")
+    label.applyIdentifier(of: column.accessibility)
     label.translatesAutoresizingMaskIntoConstraints = false
     cell.addSubview(label)
     cell.textField = label

@@ -39,6 +39,7 @@ test: generate ## Run the script tests, the project-spec checks and every packag
 	scripts/test-source-checks.sh
 	scripts/check-main-thread-guard.sh
 	scripts/check-no-network.sh
+	scripts/check-accessibility.sh
 	scripts/test-performance.sh
 	scripts/test-pre-commit.sh
 	scripts/test-ci-select-xcode.sh

@@ -39,7 +39,7 @@ Cairn is MIT licensed, and every line in it must be compatible with that.
 - Log through the categories in `Log`. Never mark a path or file name `.public`.
 - The core packages (`FileSystemCore`, `FileMetadata`, `FileOperations`) never import AppKit. Only `BrowserUI` and the app target do.
 - The minimum macOS is 15. Use a newer API only behind `#available`, with a fallback that works on macOS 15.
-- Every control needs an accessibility label and an accessibility identifier.
+- Every control needs an accessibility label and an accessibility identifier. Declare an `AccessibilityElement` and call `apply(_:)`; do not call `setAccessibilityIdentifier` or `setAccessibilityLabel` directly. A new screen gets an accessibility-audit test.
 - No telemetry, and no networking code outside the update checker.
 
 ## Before you open a pull request

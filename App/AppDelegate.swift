@@ -35,7 +35,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // The window takes its title from the browser, which shows the folder name.
     window.contentViewController = BrowserViewController(location: location)
     window.setContentSize(NSSize(width: 900, height: 600))
-    window.identifier = NSUserInterfaceItemIdentifier("main-window")
+    window.apply(.mainWindow)
     window.isReleasedWhenClosed = false
     window.center()
     window.makeKeyAndOrderFront(nil)

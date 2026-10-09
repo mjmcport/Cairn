@@ -28,7 +28,7 @@ Because the floor is 15, use the Observation framework and newer AppKit APIs fre
 - Log through `Log` (FileSystemCore). Paths and file names stay private in logs.
 - `FileSystemCore`, `FileMetadata` and `FileOperations` never import AppKit. Only `BrowserUI` and the app target do.
 - Clean room: no code from GPL projects (Nimble Commander is GPL-3) or closed-source apps.
-- Every control gets an accessibility label and identifier.
+- Every control gets an accessibility label and identifier, through `AccessibilityElement` and `apply(_:)` only.
 - No telemetry, and no networking outside the update checker.
 - Tests touch only temporary fixture folders.
 
