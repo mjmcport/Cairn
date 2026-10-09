@@ -57,6 +57,11 @@ if ! command -v xcodegen >/dev/null 2>&1; then
     fi
 fi
 
+# Use the repository's git hooks (formatting and governance checks).
+if git -C "$root" rev-parse --git-dir >/dev/null 2>&1; then
+    git -C "$root" config core.hooksPath .githooks
+fi
+
 if [ "$problems" -gt 0 ]; then
     echo "$problems problem(s) found. Fix them and run 'make bootstrap' again." >&2
     exit 1

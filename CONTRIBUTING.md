@@ -33,6 +33,7 @@ Cairn is MIT licensed, and every line in it must be compatible with that.
 
 ## Code rules
 
+- Format with Apple's swift-format and the committed `.swift-format`: two-space indentation, 100-column lines. `try!` is not allowed.
 - Swift 6 with strict concurrency checking. Do not silence a concurrency warning with `@unchecked Sendable` or `nonisolated(unsafe)` without a comment that explains why it is safe.
 - No file-system call may run on the main thread. Every function that touches the file system starts with `MainThreadGuard.assertOffMainThread()`, and its tests prove the guard fires.
 - Log through the categories in `Log`. Never mark a path or file name `.public`.
@@ -43,9 +44,10 @@ Cairn is MIT licensed, and every line in it must be compatible with that.
 
 ## Before you open a pull request
 
-1. Run `scripts/check-governance.sh`.
-2. Run `make test` and `make uitest` (available from Phase 0 step 2).
-3. Fill in the pull-request template.
+1. Run `make bootstrap` once. It enables the pre-commit hook, which refuses unformatted Swift.
+2. Run `make format`, then `make lint`.
+3. Run `make test` and `make uitest`.
+4. Fill in the pull-request template.
 
 ## Conduct
 

@@ -36,13 +36,14 @@ The individual tasks:
 
 | Task | What it does |
 | --- | --- |
-| `make bootstrap` | Checks Xcode, its license and components, and installs XcodeGen |
+| `make bootstrap` | Checks Xcode, its license and components, installs XcodeGen and enables the git hooks |
 | `make generate` | Creates `Cairn.xcodeproj` from `project.yml` |
 | `make build` | Builds the app |
 | `make test` | Runs the unit tests of every package, the script tests and the project-spec checks |
 | `make uitest` | Runs the end-to-end tests |
 | `make perf` | Runs the performance tests and compares them with `docs/performance/baseline.json` |
-| `make lint` | Checks the governance files and Swift formatting |
+| `make lint` | Checks the governance files and Swift formatting (strict) |
+| `make format` | Reformats every Swift file with the committed `.swift-format` |
 | `make clean-clone` | Proves a clean copy builds and tests with one command |
 
 The Makefile uses the Xcode at `/Applications/Xcode.app`. Set `DEVELOPER_DIR` to use another one.

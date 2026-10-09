@@ -17,7 +17,7 @@ PACKAGES := TestSupport FileSystemCore FileMetadata FileOperations BrowserUI
 XCODEBUILD := xcodebuild -project $(PROJECT) -destination '$(DESTINATION)' \
 	-derivedDataPath $(DERIVED_DATA)
 
-.PHONY: all bootstrap generate build test uitest perf perf-baseline lint clean clean-clone
+.PHONY: all bootstrap generate build test uitest perf perf-baseline lint format clean clean-clone
 
 all: bootstrap build test
 
@@ -40,6 +40,7 @@ test: generate ## Run the script tests, the project-spec checks and every packag
 	scripts/check-main-thread-guard.sh
 	scripts/check-no-network.sh
 	scripts/test-performance.sh
+	scripts/test-pre-commit.sh
 	@set -e; for package in $(PACKAGES); do \
 		echo "== $$package"; \
 		xcrun swift test --package-path Packages/$$package --scratch-path build/packages/$$package \
@@ -71,7 +72,10 @@ perf-baseline: ## Record this Mac's measurements as the new committed baseline
 
 lint: ## Check governance files and Swift formatting
 	scripts/check-governance.sh
-	xcrun swift-format lint --recursive $(SWIFT_SOURCES)
+	xcrun swift-format lint --strict --recursive --configuration .swift-format $(SWIFT_SOURCES)
+
+format: ## Reformat every Swift file in place
+	xcrun swift-format format --in-place --recursive --configuration .swift-format $(SWIFT_SOURCES)
 
 clean-clone: ## Prove a clean copy of the repository builds and tests with one command
 	scripts/test-clean-clone.sh

@@ -1,0 +1,34 @@
+#!/bin/sh
+# Refuses a commit that contains unformatted Swift or breaks a governance
+# rule. Installed by `make bootstrap`, which points core.hooksPath here.
+# Fix formatting with `make format`.
+
+root="$(git rev-parse --show-toplevel)"
+DEVELOPER_DIR="${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer}"
+export DEVELOPER_DIR
+
+staged="$(git diff --cached --name-only --diff-filter=ACMR -- '*.swift')"
+if [ -n "$staged" ]; then
+    # Check the staged content, not the working copy, so a fix that is not
+    # staged cannot hide a problem that is.
+    failed=0
+    old_ifs="$IFS"
+    IFS='
+'
+    for file in $staged; do
+        if ! git show ":$file" | xcrun swift-format lint --strict \
+            --configuration "$root/.swift-format" --assume-filename "$file" -; then
+            failed=1
+        fi
+    done
+    IFS="$old_ifs"
+    if [ "$failed" -ne 0 ]; then
+        echo "pre-commit: unformatted Swift. Run 'make format', stage the result and commit again." >&2
+        exit 1
+    fi
+fi
+
+"$root/scripts/check-governance.sh" >/dev/null || {
+    echo "pre-commit: governance check failed. Run scripts/check-governance.sh for details." >&2
+    exit 1
+}
