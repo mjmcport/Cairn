@@ -1,0 +1,22 @@
+name: Feature request
+description: Suggest something Cairn should do
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What are you trying to do, and what gets in the way today?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you would like
+    validations:
+      required: true
+  - type: textarea
+    id: prior-art
+    attributes:
+      label: How other apps handle it
+      description: Describe behavior you have seen as a user of Finder or another file manager. Do not paste or link code from GPL or closed-source projects.

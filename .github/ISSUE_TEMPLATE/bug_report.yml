@@ -1,0 +1,59 @@
+name: Bug report
+description: Something in Cairn is broken or behaves differently from Finder
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        For a security problem or a bug that can lose data through a crafted file, follow SECURITY.md instead of opening an issue.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you did, what you expected and what Cairn did instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open a folder with ...
+        2. Select ...
+        3. Press ...
+    validations:
+      required: true
+  - type: dropdown
+    id: data-loss
+    attributes:
+      label: Was any file lost, changed or damaged?
+      options:
+        - "No"
+        - "Yes"
+        - Not sure
+    validations:
+      required: true
+  - type: input
+    id: cairn-version
+    attributes:
+      label: Cairn version or commit
+    validations:
+      required: true
+  - type: input
+    id: macos-version
+    attributes:
+      label: macOS version
+      placeholder: "15.6"
+    validations:
+      required: true
+  - type: input
+    id: volume
+    attributes:
+      label: Volume type
+      description: For example internal APFS, external exFAT, network share, iCloud Drive or Dropbox.
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or crash report
+      description: Paste any relevant text. Remove file names you do not want to share.
+      render: text
