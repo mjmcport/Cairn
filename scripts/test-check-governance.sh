@@ -13,7 +13,8 @@ failed=0
 copy_repo() {
     rm -rf "$work/tree"
     mkdir -p "$work/tree"
-    (cd "$repo" && tar -cf - --exclude .git .) | (cd "$work/tree" && tar -xf -)
+    # Only tracked and unignored files: build output would take minutes to copy.
+    (cd "$repo" && git ls-files -co --exclude-standard -z | xargs -0 tar -cf -) | (cd "$work/tree" && tar -xf -)
 }
 
 expect_pass() {
@@ -51,5 +52,14 @@ expect_fail "fails when CONTRIBUTING drops the clean-room rule"
 
 copy_repo; sed -i '' '/^\*\.xcodeproj$/d' "$work/tree/.gitignore"
 expect_fail "fails when .gitignore stops ignoring the generated project"
+
+copy_repo; rm "$work/tree/docs/adr/0006-no-telemetry.md"
+expect_fail "fails when a decision record is missing"
+
+copy_repo; sed -i '' '/^## Decision/d' "$work/tree/docs/adr/0001-appkit-for-the-interface.md"
+expect_fail "fails when a decision record has no Decision section"
+
+copy_repo; sed -i '' '/0004-minimum-macos-15/d' "$work/tree/ARCHITECTURE.md"
+expect_fail "fails when ARCHITECTURE.md does not link a decision record"
 
 exit "$failed"

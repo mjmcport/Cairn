@@ -57,7 +57,7 @@ The Makefile uses the Xcode at `/Applications/Xcode.app`. Set `DEVELOPER_DIR` to
 
 ## Contributing
 
-Read [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request. Two rules matter most: every change ships with its tests, and no code may be copied or adapted from GPL or closed-source projects.
+[ARCHITECTURE.md](ARCHITECTURE.md) describes how the code is organized, and [docs/adr](docs/adr) records why. Read [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request. Two rules matter most: every change ships with its tests, and no code may be copied or adapted from GPL or closed-source projects.
 
 Report security problems as described in [SECURITY.md](SECURITY.md).
 

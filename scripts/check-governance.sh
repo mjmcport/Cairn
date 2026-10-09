@@ -40,7 +40,14 @@ for file in \
     .github/PULL_REQUEST_TEMPLATE.md \
     .github/ISSUE_TEMPLATE/bug_report.yml \
     .github/ISSUE_TEMPLATE/feature_request.yml \
-    .github/ISSUE_TEMPLATE/config.yml
+    .github/ISSUE_TEMPLATE/config.yml \
+    ARCHITECTURE.md \
+    docs/adr/0001-appkit-for-the-interface.md \
+    docs/adr/0002-xcodegen-for-the-project-file.md \
+    docs/adr/0003-mit-license-with-clean-room-rules.md \
+    docs/adr/0004-minimum-macos-15.md \
+    docs/adr/0005-distribution-outside-the-app-store.md \
+    docs/adr/0006-no-telemetry.md
 do
     require_file "$file"
 done
@@ -62,6 +69,14 @@ require_text CONTRIBUTING.md "MIT, BSD.*Apache-2\.0 and zlib" "allowed dependenc
 
 require_text CLAUDE.md "Minimum macOS \| \*\*15 Sequoia\*\*" "minimum macOS decision"
 require_text CLAUDE.md "com\.mjmcport\.cairn" "bundle ID decision"
+
+for record in "$root"/docs/adr/0*.md; do
+    name="docs/adr/$(basename "$record")"
+    require_text "$name" "^- Status: (Proposed|Accepted|Superseded)" "a status"
+    require_text "$name" "^## Decision" "a Decision section"
+    require_text "$name" "^## Consequences" "a Consequences section"
+    require_text ARCHITECTURE.md "$name" "a link to $name"
+done
 
 require_line .gitignore "*.xcodeproj" "*.xcodeproj"
 require_line .gitignore "DerivedData/" "DerivedData/"
