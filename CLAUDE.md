@@ -24,7 +24,8 @@ Because the floor is 15, use the Observation framework and newer AppKit APIs fre
 
 ## Rules that hold in every step
 
-- No file-system call on the main thread.
+- No file-system call on the main thread. Every file-system entry point starts with `MainThreadGuard.assertOffMainThread()`.
+- Log through `Log` (FileSystemCore). Paths and file names stay private in logs.
 - `FileSystemCore`, `FileMetadata` and `FileOperations` never import AppKit. Only `BrowserUI` and the app target do.
 - Clean room: no code from GPL projects (Nimble Commander is GPL-3) or closed-source apps.
 - Every control gets an accessibility label and identifier.

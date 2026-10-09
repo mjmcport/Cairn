@@ -34,7 +34,8 @@ Cairn is MIT licensed, and every line in it must be compatible with that.
 ## Code rules
 
 - Swift 6 with strict concurrency checking. Do not silence a concurrency warning with `@unchecked Sendable` or `nonisolated(unsafe)` without a comment that explains why it is safe.
-- No file-system call may run on the main thread.
+- No file-system call may run on the main thread. Every function that touches the file system starts with `MainThreadGuard.assertOffMainThread()`, and its tests prove the guard fires.
+- Log through the categories in `Log`. Never mark a path or file name `.public`.
 - The core packages (`FileSystemCore`, `FileMetadata`, `FileOperations`) never import AppKit. Only `BrowserUI` and the app target do.
 - The minimum macOS is 15. Use a newer API only behind `#available`, with a fallback that works on macOS 15.
 - Every control needs an accessibility label and an accessibility identifier.

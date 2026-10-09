@@ -49,7 +49,7 @@ The Makefile uses the Xcode at `/Applications/Xcode.app`. Set `DEVELOPER_DIR` to
 ## Privacy
 
 - Cairn collects no telemetry and no analytics.
-- Crash and diagnostic reports stay on your Mac unless you choose to share them.
+- Crash and diagnostic reports stay on your Mac unless you choose to share them. They are saved in `~/Library/Application Support/Cairn/Diagnostics`.
 - The only network request Cairn will make is the check for app updates, once that feature ships.
 - No feature is locked behind a paywall.
 

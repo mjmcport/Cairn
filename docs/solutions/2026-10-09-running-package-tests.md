@@ -22,3 +22,8 @@ tags: [swiftpm, testing, disk]
 
 - CI should cache `build/packages` between runs.
 - If the package count grows, consider one workspace-level test plan so the packages share a single build folder.
+
+## Added in step 6
+
+- **The first `swift test` after adding source files to a dependency package can fail** with "cannot find X in scope" for the new files, when run from a package that depends on it. The second run passes. If CI shows this, clear `build/packages/<name>` for the dependent package.
+- **RTK filters `make` output in Claude Code sessions.** A redirected log from `make test` is truncated. Use `rtk proxy make test` to capture the full output, and trust the exit status either way.

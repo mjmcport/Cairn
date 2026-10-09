@@ -35,6 +35,9 @@ test: generate ## Run the script tests, the project-spec checks and every packag
 	scripts/check-project-spec.sh
 	scripts/test-check-appkit-boundary.sh
 	scripts/check-appkit-boundary.sh
+	scripts/test-source-checks.sh
+	scripts/check-main-thread-guard.sh
+	scripts/check-no-network.sh
 	@set -e; for package in $(PACKAGES); do \
 		echo "== $$package"; \
 		xcrun swift test --package-path Packages/$$package --scratch-path build/packages/$$package; \

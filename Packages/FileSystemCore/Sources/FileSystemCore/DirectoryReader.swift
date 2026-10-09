@@ -30,7 +30,9 @@ public struct DirectoryReader: DirectoryReading {
 
   /// Synchronous because `FileManager`'s enumerator cannot be iterated from
   /// an async context. Call it only from ``items(in:)``.
-  private static func readItems(in directory: URL) throws -> [FileItem] {
+  static func readItems(in directory: URL) throws -> [FileItem] {
+    MainThreadGuard.assertOffMainThread()
+    let started = ContinuousClock.now
     let isDirectory = try directory.resourceValues(forKeys: [.isDirectoryKey]).isDirectory
     guard isDirectory == true else {
       throw DirectoryReadError.notADirectory(directory)
@@ -60,8 +62,12 @@ public struct DirectoryReader: DirectoryReading {
       items.append(FileItem(url: url, resourceValues: values))
     }
     if let failure {
+      Log.fileSystem.error(
+        "Listing failed after \(items.count) items: \(failure.localizedDescription)")
       throw failure
     }
+    let elapsed = ContinuousClock.now - started
+    Log.fileSystem.debug("Listed \(items.count) items in \(elapsed, privacy: .public)")
     return items
   }
 }

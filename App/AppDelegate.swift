@@ -1,5 +1,6 @@
 import AppKit
 import BrowserUI
+import FileSystemCore
 
 /// The application entry point. Opens one window that lists a folder: the one
 /// named by `-OpenFolder <path>` at launch, or the home folder.
@@ -7,6 +8,7 @@ import BrowserUI
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
   private var window: NSWindow?
+  private let diagnostics = DiagnosticsSubscriber()
 
   static func main() {
     let application = NSApplication.shared
@@ -18,6 +20,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
   func applicationDidFinishLaunching(_ notification: Notification) {
     NSApp.mainMenu = MainMenu.make()
+    diagnostics.start()
 
     let window = NSWindow(
       contentRect: NSRect(x: 0, y: 0, width: 900, height: 600),
@@ -39,6 +42,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     self.window = window
 
     NSApp.activate()
+    Log.lifecycle.info("Launched")
   }
 
   func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {

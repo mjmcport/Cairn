@@ -29,6 +29,8 @@ settings:
 packages:
   BrowserUI:
     path: Packages/BrowserUI
+  FileSystemCore:
+    path: Packages/FileSystemCore
   TestSupport:
     path: Packages/TestSupport
 
@@ -40,6 +42,8 @@ targets:
       - path: App
     dependencies:
       - package: BrowserUI
+      - package: FileSystemCore
+      - sdk: MetricKit.framework
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.mjmcport.cairn
