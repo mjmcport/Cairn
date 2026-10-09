@@ -49,6 +49,8 @@ Cairn is MIT licensed, and every line in it must be compatible with that.
 3. Run `make test` and `make uitest`.
 4. Fill in the pull-request template.
 
+CI runs the same `make` tasks on every push to `main` and every pull request: `bootstrap`, `lint`, `build`, `test`, `uitest` and `perf`. A pull request needs a green **Build and test** check.
+
 ## Conduct
 
 Everyone taking part is expected to follow the [Code of Conduct](CODE_OF_CONDUCT.md).

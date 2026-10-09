@@ -24,7 +24,7 @@ make perf-baseline   # measure and replace baseline.json
 
 `make perf` reports any measurement more than 25% slower than the baseline. It does not fail the build yet; `scripts/performance.py compare --strict` does.
 
-Times from another Mac are not comparable with this file. Record a new baseline when the reference machine changes, and say so in the commit.
+Times from another Mac are not comparable with this file, so `compare` shows them without judging them. That includes CI: the GitHub runner (VirtualMac2,1) is 40% to 85% slower than the reference Mac on listing and sorting. CI proves the performance tests still run and posts the table in the run summary. Record a new baseline when the reference machine changes, and say so in the commit.
 
 ## How it works
 

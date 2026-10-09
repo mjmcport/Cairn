@@ -1,0 +1,70 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# A newer push to the same branch or pull request replaces the run in progress.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Build and test
+    runs-on: macos-26
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: scripts/ci-select-xcode.sh >> "$GITHUB_ENV"
+
+      - name: Bootstrap
+        run: make bootstrap
+
+      - name: Format check
+        run: make lint
+
+      - name: Build
+        run: make build
+
+      - name: Unit tests
+        run: make test
+
+      - name: UI tests
+        run: make uitest
+
+      # Reported, not blocking: runner timings vary too much to gate on yet.
+      - name: Performance tests
+        id: performance
+        continue-on-error: true
+        run: |
+          mkdir -p build/performance
+          make perf | tee build/performance/summary.txt
+          {
+            echo '### Performance'
+            echo
+            echo '```'
+            cat build/performance/summary.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Note a performance failure
+        if: steps.performance.outcome == 'failure'
+        run: echo "::warning title=Performance tests::The performance tests did not complete. See the Performance tests step."
+
+      - name: Upload test results
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: |
+            build/DerivedData/Logs/Test
+            build/performance
+          if-no-files-found: ignore
+          retention-days: 7

@@ -103,6 +103,14 @@ def command_compare(arguments):
         latest = json.load(file)
     rows, regressions, missing, added = compare(baseline, latest, arguments.threshold)
 
+    # Times from a different Mac say nothing about the code, so they are shown
+    # but never called a regression.
+    base_model = baseline["machine"].get("model")
+    latest_model = latest["machine"].get("model")
+    comparable = base_model == latest_model
+    if not comparable:
+        regressions = []
+
     width = max([len(row[0]) for row in rows] + [4])
     print(f"{'Test':<{width}}  {'Baseline':>10}  {'Latest':>10}  {'Change':>8}")
     for name, base, new, change in rows:
@@ -113,10 +121,10 @@ def command_compare(arguments):
     for name in added:
         print(f"NEW: {name} has no baseline yet")
 
-    if baseline["machine"].get("model") != latest["machine"].get("model"):
+    if not comparable:
         print(
-            f"note: baseline was recorded on {baseline['machine'].get('model')}, "
-            f"this run on {latest['machine'].get('model')}; times are not directly comparable"
+            f"note: the baseline was recorded on {base_model} and this run on {latest_model}, "
+            "so the times are shown for information and not judged"
         )
     if regressions or missing:
         print(
@@ -124,7 +132,8 @@ def command_compare(arguments):
             f"{len(missing)} missing measurement(s)"
         )
         return 1 if arguments.strict else 0
-    print("No performance regression")
+    if comparable:
+        print("No performance regression")
     return 0
 
 

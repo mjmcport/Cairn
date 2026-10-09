@@ -41,6 +41,7 @@ test: generate ## Run the script tests, the project-spec checks and every packag
 	scripts/check-no-network.sh
 	scripts/test-performance.sh
 	scripts/test-pre-commit.sh
+	scripts/test-ci-select-xcode.sh
 	@set -e; for package in $(PACKAGES); do \
 		echo "== $$package"; \
 		xcrun swift test --package-path Packages/$$package --scratch-path build/packages/$$package \

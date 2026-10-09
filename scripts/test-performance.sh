@@ -70,4 +70,15 @@ output="$(python3 "$tool" compare "$work/baseline.json" "$work/latest.json" --st
 [ $? -eq 1 ] && echo "$output" | grep -q "MISSING: PerformanceTests.testTimeToFirstRows10000" \
     && ok "reports a measurement that disappeared" || not_ok "reports a measurement that disappeared"
 
+make_latest 0.500 5.000
+python3 - "$work/latest.json" <<'PY'
+import json, sys
+document = json.load(open(sys.argv[1]))
+document["machine"]["model"] = "SomeOtherMac1,1"
+json.dump(document, open(sys.argv[1], "w"))
+PY
+output="$(python3 "$tool" compare "$work/baseline.json" "$work/latest.json" --strict)"
+[ $? -eq 0 ] && ! echo "$output" | grep -q "REGRESSION" && echo "$output" | grep -q "not judged" \
+    && ok "does not judge times from a different Mac" || not_ok "does not judge times from a different Mac"
+
 exit "$failed"
