@@ -30,6 +30,7 @@ Cairn is MIT licensed, and every line in it must be compatible with that.
 - One commit per step of the plan, with code, tests and docs together.
 - Name the phase and step in the message, for example `Phase 0 step 3: package skeletons`.
 - Keep `main` buildable at every commit.
+- From Phase 1, changes arrive by pull request and merge only on a green **Build and test** check.
 
 ## Code rules
 

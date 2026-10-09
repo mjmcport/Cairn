@@ -18,7 +18,7 @@ A native Mac file manager in Swift and AppKit. The full plan is the Claude Doc "
 | Tests | Swift Testing (unit), XCTest (performance), XCUITest (end-to-end). Tests ship in the same commit as the code |
 | Distribution | Developer ID, notarized, hardened runtime, not sandboxed. Sparkle 2 for updates |
 | Dependencies | MIT, BSD, Apache-2.0 or zlib only |
-| Workflow | One git commit per step, tests included, compound engineering loop |
+| Workflow | One git commit per step, tests included, compound engineering loop. Pushing, CI and branches follow "CI, pushing and branches" below |
 
 Because the floor is 15, use the Observation framework and newer AppKit APIs freely, with no macOS 14 guards.
 
@@ -38,9 +38,15 @@ Because the floor is 15, use the Observation framework and newer AppKit APIs fre
 2. **Work:** implement with unit tests, and end-to-end tests when the step touches the app.
 3. **Review:** run the review pass and fix the findings.
 4. **Compound:** record what was learned in `docs/solutions/`.
-5. **Commit:** one commit, message `Phase N step N: <name>`, then push.
+5. **Commit:** one commit, message `Phase N step N: <name>`. Do not push here; see the next section.
 
 Read `docs/solutions/` before planning a step.
+
+## CI, pushing and branches
+
+- Never start a new step or push on top of a red CI run. After each push, wait for CI with `gh run watch` and fix a red run before continuing.
+- Commit after every step. Push at milestones, not after every commit.
+- Starting in Phase 1, work on a branch and open a pull request. Merge only when CI is green, so `main` stays green.
 
 ## Repository layout
 
@@ -75,9 +81,11 @@ Recorded 2026-10-09 on the development Mac.
 | Signing identity | None yet |
 | Compound engineering plugin | 3.30.4 (`every-marketplace`) |
 
+Three macOS versions matter: the CI runner is macOS 26 (runner label `macos-26`), the development Mac is macOS 27, and the minimum supported is macOS 15. Accessibility and UI behavior can differ between them, so a local pass does not mean CI will pass.
+
 ## Status
 
-Phase 0 is complete (12 steps, one commit each). Its plans are in `plans/` and its lessons in `docs/solutions/`. Phase 1 (Finder-replacement core) is next.
+Phase 0 is complete (12 steps, one commit each). Its plans are in `plans/` and its lessons in `docs/solutions/`. The Phase 0 follow-up (`plans/phase-0-follow-up.md`) closes it out. Phase 1 (Finder-replacement core) is next, on branches and pull requests.
 
 ## Open items
 

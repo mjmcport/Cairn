@@ -62,4 +62,16 @@ expect_fail "fails when a decision record has no Decision section"
 copy_repo; sed -i '' '/0004-minimum-macos-15/d' "$work/tree/ARCHITECTURE.md"
 expect_fail "fails when ARCHITECTURE.md does not link a decision record"
 
+copy_repo; sed -i '' '/gh run watch/d' "$work/tree/CLAUDE.md"
+expect_fail "fails when CLAUDE.md drops the wait-for-CI rule"
+
+copy_repo; sed -i '' '/Push at milestones/d' "$work/tree/CLAUDE.md"
+expect_fail "fails when CLAUDE.md drops the push-at-milestones rule"
+
+copy_repo; sed -i '' '/open a pull request/d' "$work/tree/CLAUDE.md"
+expect_fail "fails when CLAUDE.md drops the pull-request rule"
+
+copy_repo; sed -i '' '/development Mac is macOS 27/d' "$work/tree/CLAUDE.md"
+expect_fail "fails when CLAUDE.md drops the macOS version split"
+
 exit "$failed"

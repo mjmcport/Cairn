@@ -69,6 +69,11 @@ require_text CONTRIBUTING.md "MIT, BSD.*Apache-2\.0 and zlib" "allowed dependenc
 
 require_text CLAUDE.md "Minimum macOS \| \*\*15 Sequoia\*\*" "minimum macOS decision"
 require_text CLAUDE.md "com\.mjmcport\.cairn" "bundle ID decision"
+require_text CLAUDE.md "wait for CI with .gh run watch." "wait for CI after each push"
+require_text CLAUDE.md "Push at milestones, not after every commit" "push at milestones"
+require_text CLAUDE.md "open a pull request\. Merge only when CI is green" "the pull-request rule"
+require_text CLAUDE.md "CI runner is macOS 26.*development Mac is macOS 27.*minimum supported is macOS 15" \
+    "the three macOS versions"
 
 for record in "$root"/docs/adr/0*.md; do
     name="docs/adr/$(basename "$record")"
