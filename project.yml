@@ -1,0 +1,77 @@
+# XcodeGen spec. Run `make generate` to create Cairn.xcodeproj, which is not committed.
+name: Cairn
+
+options:
+  bundleIdPrefix: com.mjmcport
+  deploymentTarget:
+    macOS: "15.0"
+  createIntermediateGroups: true
+  generateEmptyDirectories: true
+  defaultConfig: Debug
+
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    SWIFT_STRICT_CONCURRENCY: complete
+    MACOSX_DEPLOYMENT_TARGET: "15.0"
+    # Apple Silicon only.
+    ARCHS: arm64
+    EXCLUDED_ARCHS: x86_64
+    # No Developer ID yet: sign to run locally. Developer ID signing arrives in Phase 1.
+    CODE_SIGN_STYLE: Manual
+    CODE_SIGN_IDENTITY: "-"
+    DEVELOPMENT_TEAM: ""
+    MARKETING_VERSION: "0.0.1"
+    CURRENT_PROJECT_VERSION: "1"
+    SWIFT_TREAT_WARNINGS_AS_ERRORS: YES
+    GCC_TREAT_WARNINGS_AS_ERRORS: YES
+
+targets:
+  Cairn:
+    type: application
+    platform: macOS
+    sources:
+      - path: App
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.mjmcport.cairn
+        PRODUCT_NAME: Cairn
+        # Distributed outside the App Store: hardened runtime on, sandbox off.
+        ENABLE_HARDENED_RUNTIME: YES
+        ENABLE_APP_SANDBOX: NO
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_NSPrincipalClass: NSApplication
+        INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.utilities
+        INFOPLIST_KEY_NSHumanReadableCopyright: "Copyright © 2026 Matthew McGuire. MIT License."
+
+  CairnUITests:
+    type: bundle.ui-testing
+    platform: macOS
+    sources:
+      - path: UITests
+    dependencies:
+      - target: Cairn
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.mjmcport.cairn.uitests
+        TEST_TARGET_NAME: Cairn
+        GENERATE_INFOPLIST_FILE: YES
+
+schemes:
+  Cairn:
+    build:
+      targets:
+        Cairn: all
+    run:
+      config: Debug
+    archive:
+      config: Release
+  CairnUITests:
+    build:
+      targets:
+        Cairn: all
+        CairnUITests: [test]
+    test:
+      config: Debug
+      targets:
+        - CairnUITests

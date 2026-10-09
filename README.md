@@ -23,18 +23,22 @@ The Xcode project is generated from `project.yml` by XcodeGen and is not committ
 ```sh
 git clone https://github.com/mjmcport/Cairn.git
 cd Cairn
-make bootstrap   # install build tools
-make generate    # create Cairn.xcodeproj from project.yml
-make build       # build the app
-make test        # run the unit tests
-make uitest      # run the end-to-end tests
+make             # check the toolchain, generate the project, build and test
 ```
 
-The `make` tasks arrive in Phase 0 step 2. Until then, the only runnable check is:
+The individual tasks:
 
-```sh
-scripts/check-governance.sh
-```
+| Task | What it does |
+| --- | --- |
+| `make bootstrap` | Checks Xcode, its license and components, and installs XcodeGen |
+| `make generate` | Creates `Cairn.xcodeproj` from `project.yml` |
+| `make build` | Builds the app |
+| `make test` | Runs the script tests and the project-spec checks |
+| `make uitest` | Runs the end-to-end tests |
+| `make lint` | Checks the governance files and Swift formatting |
+| `make clean-clone` | Proves a clean copy builds and tests with one command |
+
+The Makefile uses the Xcode at `/Applications/Xcode.app`. Set `DEVELOPER_DIR` to use another one.
 
 ## Privacy
 

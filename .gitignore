@@ -70,3 +70,6 @@ DerivedData/
 .swiftpm/
 *.xcresult
 .DS_Store
+
+# Local build output (make build, make test)
+build/
