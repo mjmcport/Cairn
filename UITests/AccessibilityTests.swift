@@ -33,9 +33,11 @@ final class AccessibilityTests: XCTestCase {
   }
 
   /// Runs the system accessibility audit and fails on every issue it reports,
-  /// with two exceptions:
+  /// with three exceptions:
   ///
   /// - The Touch Bar, which the system owns and the app does not populate.
+  /// - "Parent/Child mismatch" on a group inside a window title-bar button.
+  ///   macOS 26 reports the zoom button's inner group; the system draws it.
   /// - "Label not human-readable" on a list cell that shows text. The cell
   ///   speaks a file name, such as `alpha.txt`, which is the user's own data
   ///   and the correct thing to say even though it is not a dictionary word.
@@ -59,12 +61,21 @@ final class AccessibilityTests: XCTestCase {
 
   @MainActor
   private func runAudit(_ app: XCUIApplication, _ screen: String) throws {
+    // The close, minimize and zoom buttons, which the system draws.
+    let windowButtons = app.windows.buttons
+      .matching(NSPredicate(format: "identifier BEGINSWITH '_XCUI:'"))
+      .allElementsBoundByIndex.map(\.frame)
     try app.performAccessibilityAudit { issue in
       guard let element = issue.element else {
         XCTFail("\(screen): \(issue.compactDescription)")
         return true
       }
       if element.elementType == .touchBar { return true }
+      if issue.auditType == .parentChild, element.elementType == .group,
+        windowButtons.contains(where: { $0.insetBy(dx: -1, dy: -1).contains(element.frame) })
+      {
+        return true
+      }
       if issue.auditType == .sufficientElementDescription, element.elementType == .cell,
         let text = element.staticTexts.firstMatch.value as? String, !text.isEmpty
       {

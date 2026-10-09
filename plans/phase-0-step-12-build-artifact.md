@@ -27,7 +27,7 @@ Give every commit on `main` a downloadable build, so a change can be tried witho
 | Gate | Status |
 | --- | --- |
 | A clean clone builds and passes all tests with one command on an Apple Silicon Mac | Met: `make`, proved by `make clean-clone` |
-| CI is green on main and blocks a failing pull request | Half met: CI is green and turns a failing pull request red. Blocking needs branch protection, which GitHub's free plan refuses on a private repository |
+| CI is green on main and blocks a failing pull request | Half met: CI is green (after the accessibility-audit fix that follows step 12) and turns a failing pull request red. Blocking needs branch protection, which GitHub's free plan refuses on a private repository |
 | The app lists a folder and navigates into subfolders, covered by an end-to-end test | Met: `UITests/BrowsingTests.swift` |
 | Performance baselines are committed for 10,000- and 100,000-item folders | Met: `docs/performance/baseline.json` |
 | The six decision records are merged | Met: `docs/adr` |

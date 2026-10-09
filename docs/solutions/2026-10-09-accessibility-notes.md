@@ -25,3 +25,12 @@ tags: [accessibility, xcuitest, voiceover]
 
 - Every new control: declare an `AccessibilityElement`, apply it, and add the screen to the audit tests if it is a new screen.
 - Prefer `labelColor` for text that carries information; check anything dimmer with the audit.
+
+## Added after step 12: the audit differs between macOS versions
+
+The audit passed on the development Mac (macOS 27) and failed on the CI runner (macOS 26) with "Parent/Child mismatch" on an unnamed group. `detailedDescription` printed no element path on the runner until the handler printed `element.debugDescription`, which showed the group sits inside the window's zoom button (`_XCUI:FullScreenWindow`): system window chrome, not app code.
+
+- The audit now skips that finding only for a group whose frame lies inside one of the window's own title-bar buttons.
+- **The step 10 and step 11 commits are red on `main` for this reason.** The UI suite was run locally before each push, but CI's result was not checked before the next step was pushed.
+- Check CI after every push, not only at the end. An accessibility audit is a test of the operating system's own controls as well as the app's, so it must pass on every macOS version CI runs.
+- To see what an audit finding refers to on CI, print `issue.element?.debugDescription`.
