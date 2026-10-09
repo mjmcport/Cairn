@@ -16,6 +16,15 @@ public enum DirectoryReadError: Error, Equatable, Sendable {
   case notADirectory(URL)
 }
 
+extension DirectoryReadError: LocalizedError {
+  /// Shown in the browser in place of the listing.
+  public var errorDescription: String? {
+    switch self {
+    case .notADirectory(let url): "\(url.lastPathComponent) is not a folder."
+    }
+  }
+}
+
 /// Lists folders on disk, prefetching the resource keys a listing shows.
 public struct DirectoryReader: DirectoryReading {
   /// How many items are read between cancellation checks.
@@ -30,17 +39,26 @@ public struct DirectoryReader: DirectoryReading {
 
   /// Synchronous because `FileManager`'s enumerator cannot be iterated from
   /// an async context. Call it only from ``items(in:)``.
-  static func readItems(in directory: URL) throws -> [FileItem] {
+  /// - Parameter onCancellationCheck: Called with the number of items read so
+  ///   far, just before each cancellation check. Tests use it to cancel a
+  ///   listing that is under way.
+  static func readItems(
+    in directory: URL, onCancellationCheck: (_ itemsRead: Int) -> Void = { _ in }
+  ) throws -> [FileItem] {
     MainThreadGuard.assertOffMainThread()
     let started = ContinuousClock.now
-    let isDirectory = try directory.resourceValues(forKeys: [.isDirectoryKey]).isDirectory
+    // The location may itself be a symbolic link, as /tmp and /var are. Neither
+    // the directory check nor the enumerator follows one, so follow it here.
+    // The items are then reported under the folder the link leads to.
+    let target = followingSymbolicLinks(directory)
+    let isDirectory = try target.resourceValues(forKeys: [.isDirectoryKey]).isDirectory
     guard isDirectory == true else {
       throw DirectoryReadError.notADirectory(directory)
     }
 
     var failure: (any Error)?
     let enumerator = FileManager.default.enumerator(
-      at: directory,
+      at: target,
       includingPropertiesForKeys: Array(FileItem.resourceKeys),
       options: [.skipsSubdirectoryDescendants, .skipsPackageDescendants],
       errorHandler: { _, error in
@@ -55,6 +73,7 @@ public struct DirectoryReader: DirectoryReading {
     var items: [FileItem] = []
     for case let url as URL in enumerator {
       if items.count.isMultiple(of: cancellationInterval) {
+        onCancellationCheck(items.count)
         try Task.checkCancellation()
       }
       // An item deleted since it was listed has no values; leave it out.
@@ -69,5 +88,14 @@ public struct DirectoryReader: DirectoryReading {
     let elapsed = ContinuousClock.now - started
     Log.fileSystem.debug("Listed \(items.count) items in \(elapsed, privacy: .public)")
     return items
+  }
+
+  /// The location with every symbolic link in its path followed. A location
+  /// that cannot be resolved (a missing folder, say) is returned unchanged,
+  /// and listing it reports why.
+  private static func followingSymbolicLinks(_ location: URL) -> URL {
+    guard let path = realpath(location.path(percentEncoded: false), nil) else { return location }
+    defer { free(path) }
+    return URL(fileURLWithFileSystemRepresentation: path, isDirectory: false, relativeTo: nil)
   }
 }

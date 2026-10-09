@@ -82,10 +82,15 @@ public final class BrowserModel {
     return true
   }
 
+  /// The folder that contains the current one, or nil at the root.
+  public var enclosingFolder: URL? {
+    let parent = location.deletingLastPathComponent()
+    return parent.path == location.path ? nil : parent
+  }
+
   /// Shows the folder that contains the current one. Does nothing at the root.
   public func navigateToEnclosingFolder() async {
-    let parent = location.deletingLastPathComponent()
-    guard parent.path != location.path else { return }
-    await navigate(to: parent)
+    guard let enclosingFolder else { return }
+    await navigate(to: enclosingFolder)
   }
 }

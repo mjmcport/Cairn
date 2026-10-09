@@ -72,12 +72,14 @@ import Testing
     let tree = try makeTree()
     defer { try? tree.remove() }
     let model = BrowserModel(location: tree.url("Sub"))
+    #expect(model.enclosingFolder?.path == tree.root.path)
 
     await model.navigateToEnclosingFolder()
     #expect(model.location.path == tree.root.path)
     #expect(model.items.count == 4)
 
     let root = BrowserModel(location: URL(filePath: "/"), reader: StubReader(results: [:]))
+    #expect(root.enclosingFolder == nil)
     await root.navigateToEnclosingFolder()
     #expect(root.location.path == "/")
   }
@@ -146,49 +148,5 @@ import Testing
     await gate.open()
     await load.value
     #expect(model.state == .loading)
-  }
-}
-
-/// A listing that returns canned items and can be held at a gate.
-private struct StubReader: DirectoryReading {
-  var results: [URL: [FileItem]]
-  var gates: [URL: Gate] = [:]
-
-  func items(in directory: URL) async throws -> [FileItem] {
-    if let gate = gates[directory] {
-      await gate.pass()
-    }
-    try Task.checkCancellation()
-    guard let items = results[directory] else {
-      throw CocoaError(.fileReadNoSuchFile)
-    }
-    return items
-  }
-}
-
-/// Holds a caller at `pass()` until `open()` is called.
-private actor Gate {
-  private var isOpen = false
-  private var reached = false
-  private var waiters: [CheckedContinuation<Void, Never>] = []
-  private var reachedWaiters: [CheckedContinuation<Void, Never>] = []
-
-  func pass() async {
-    reached = true
-    for waiter in reachedWaiters { waiter.resume() }
-    reachedWaiters = []
-    guard !isOpen else { return }
-    await withCheckedContinuation { waiters.append($0) }
-  }
-
-  func waitUntilReached() async {
-    guard !reached else { return }
-    await withCheckedContinuation { reachedWaiters.append($0) }
-  }
-
-  func open() {
-    isOpen = true
-    for waiter in waiters { waiter.resume() }
-    waiters = []
   }
 }

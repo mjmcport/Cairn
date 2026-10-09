@@ -1,12 +1,13 @@
 #!/bin/sh
-# Tests check-main-thread-guard.sh and check-no-network.sh against small
-# generated trees.
+# Tests check-main-thread-guard.sh, check-no-network.sh and
+# check-accessibility.sh against small generated trees.
 
 set -u
 here="$(cd "$(dirname "$0")" && pwd)"
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 failed=0
+root="$work/tree"
 source_dir="$work/tree/Packages/FileSystemCore/Sources/FileSystemCore"
 
 make_tree() {
@@ -17,7 +18,7 @@ make_tree() {
 }
 
 expect() { # expect SCRIPT pass|fail NAME
-    if CAIRN_ROOT="$work/tree" "$here/$1" >/dev/null 2>&1; then actual=pass; else actual=fail; fi
+    if CAIRN_ROOT="$root" "$here/$1" >/dev/null 2>&1; then actual=pass; else actual=fail; fi
     if [ "$actual" = "$2" ]; then echo "ok: $3"; else echo "NOT OK: $3 (expected $2)"; failed=1; fi
 }
 
@@ -48,6 +49,14 @@ expect $guard pass "guard: ignores test targets"
 
 make_tree; printf '  case rename(item: URL, newName: String)\n  // call stat( here later\n' > "$source_dir/Fine.swift"
 expect $guard pass "guard: ignores an enum case and a comment that share a call's name"
+
+make_tree; mkdir -p "$work/tree/Packages/NewPackage/Sources/NewPackage"
+echo 'let d = try Data(contentsOf: url)' > "$work/tree/Packages/NewPackage/Sources/NewPackage/Bad.swift"
+expect $guard fail "guard: checks a package it has never heard of"
+
+make_tree; mkdir -p "$work/tree/Packages/TestSupport/Sources/TestSupport"
+echo 'let d = try Data(contentsOf: url)' > "$work/tree/Packages/TestSupport/Sources/TestSupport/Fixture.swift"
+expect $guard pass "guard: exempts TestSupport"
 
 network=check-no-network.sh
 make_tree
@@ -88,5 +97,28 @@ expect $accessibility fail "accessibility: rejects a literal view identifier"
 
 make_ui_tree; echo '// never call setAccessibilityLabel( directly' >> "$ui_dir/View.swift"
 expect $accessibility pass "accessibility: ignores a comment"
+
+# A checkout under a folder whose name has a space is checked like any other.
+move_tree_under_a_space() {
+    rm -rf "$work/My Projects"
+    mkdir -p "$work/My Projects"
+    mv "$work/tree" "$work/My Projects/tree"
+    root="$work/My Projects/tree"
+}
+
+make_ui_tree; move_tree_under_a_space
+expect $guard pass "space in path: guard allows a clean tree"
+expect $network pass "space in path: network allows a clean tree"
+expect $accessibility pass "space in path: accessibility allows a clean tree"
+
+make_ui_tree
+echo 'let x = try FileManager.default.contentsOfDirectory(atPath: p)' > "$source_dir/Bad.swift"
+echo 'let task = URLSession.shared.dataTask(with: url)' > "$source_dir/Worse.swift"
+echo 'button.setAccessibilityLabel("OK")' >> "$work/tree/App/AppDelegate.swift"
+move_tree_under_a_space
+expect $guard fail "space in path: guard rejects FileManager without a guard"
+expect $network fail "space in path: network rejects URLSession"
+expect $accessibility fail "space in path: accessibility rejects a direct label"
+root="$work/tree"
 
 exit "$failed"

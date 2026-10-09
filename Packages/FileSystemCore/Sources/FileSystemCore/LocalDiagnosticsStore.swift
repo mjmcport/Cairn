@@ -45,6 +45,23 @@ public struct LocalDiagnosticsStore: Sendable {
     return file
   }
 
+  /// Writes each report, carrying on past one that cannot be saved.
+  /// - Returns: How many reports were saved.
+  @discardableResult
+  public func saveAll(_ reports: [Data], kind: String) -> Int {
+    MainThreadGuard.assertOffMainThread()
+    var saved = 0
+    for report in reports {
+      do {
+        try save(report, kind: kind)
+        saved += 1
+      } catch {
+        Log.diagnostics.error("Could not save a diagnostic report: \(error.localizedDescription)")
+      }
+    }
+    return saved
+  }
+
   /// The saved reports, oldest first.
   public func reports() throws -> [URL] {
     MainThreadGuard.assertOffMainThread()

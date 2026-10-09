@@ -1,4 +1,5 @@
 import AppKit
+import Foundation
 import Testing
 
 @testable import BrowserUI
@@ -38,8 +39,9 @@ import Testing
   }
 
   @Test func theBrowserUsesDeclaredElementsForEveryControl() throws {
+    let folder = URL(filePath: "/fixture/folder", directoryHint: .isDirectory)
     let controller = BrowserViewController(
-      location: URL(filePath: "/tmp", directoryHint: .isDirectory))
+      location: folder, reader: StubReader(results: [folder: []]))
     let declared = Set(AccessibilityElement.all.map(\.identifier))
 
     var found: [String] = []

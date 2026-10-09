@@ -10,7 +10,12 @@ allowed_directories=""   # e.g. "App/Updates"
 network_apis='URLSession|URLRequest|NWConnection|NWListener|NWBrowser|NWPathMonitor|^[[:space:]]*import[[:space:]]+(Network|WebKit|CFNetwork|MultipeerConnectivity)|CFSocket|CFStreamCreatePairWithSocket|WKWebView|NSURLConnection|import[[:space:]]+(Sentry|Firebase|Amplitude|Mixpanel)'
 failures=0
 
+# Split the file list on newlines only, so a path with a space stays one file.
+old_ifs="$IFS"
+IFS='
+'
 for file in $(find "$root/App" "$root/Packages" -name '*.swift' -path '*' ! -path '*/Tests/*' ! -path '*/.build/*' 2>/dev/null); do
+    IFS="$old_ifs"
     relative="${file#"$root"/}"
     skip=0
     for allowed in $allowed_directories; do
@@ -23,6 +28,7 @@ for file in $(find "$root/App" "$root/Packages" -name '*.swift' -path '*' ! -pat
         failures=$((failures + 1))
     fi
 done
+IFS="$old_ifs"
 
 if [ "$failures" -gt 0 ]; then
     echo "$failures no-network check(s) failed" >&2

@@ -46,7 +46,7 @@ import Testing
       try DirectoryReader.readItems(in: tree.root)
     }
     #expect(items.count == 1)
-    #expect(violations.all.map(\.entryPoint) == ["readItems(in:)"])
+    #expect(violations.all.map(\.entryPoint) == ["readItems(in:onCancellationCheck:)"])
   }
 
   @Test @MainActor func listingThroughTheAsyncAPIFromTheMainActorDoesNotTripTheGuard() async throws
@@ -71,9 +71,11 @@ import Testing
     try MainThreadGuard.withHandler(violations.record) {
       try store.save(Data("{}".utf8), kind: "diagnostic")
       _ = try store.reports()
+      store.saveAll([Data("{}".utf8)], kind: "diagnostic")
     }
     let entryPoints = Set(violations.all.map(\.entryPoint))
     #expect(entryPoints.contains("save(_:kind:date:)"))
+    #expect(entryPoints.contains("saveAll(_:kind:)"))
     #expect(entryPoints.contains("reports()"))
   }
 

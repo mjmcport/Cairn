@@ -53,6 +53,21 @@ import Testing
     }
   }
 
+  @Test func savingSeveralReportsCountsOnlyTheOnesThatWereSaved() async throws {
+    try await withTemporaryDirectory { root in
+      let reports = [Data("a".utf8), Data("b".utf8)]
+      let store = LocalDiagnosticsStore(directory: root.appending(path: "Diagnostics"))
+      #expect(store.saveAll(reports, kind: "diagnostic") == 2)
+      #expect(try store.reports().count == 2)
+
+      // A folder cannot be created inside a file, so every save here fails.
+      let file = root.appending(path: "file.txt")
+      try Data().write(to: file)
+      let blocked = LocalDiagnosticsStore(directory: file.appending(path: "Diagnostics"))
+      #expect(blocked.saveAll(reports, kind: "diagnostic") == 0)
+    }
+  }
+
   @Test func aKindCannotEscapeTheFolder() async throws {
     try await withTemporaryDirectory { root in
       let folder = root.appending(path: "Diagnostics", directoryHint: .isDirectory)

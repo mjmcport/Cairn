@@ -7,6 +7,7 @@
 
 root="${CAIRN_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}"
 core_packages="FileSystemCore FileMetadata FileOperations TestSupport"
+ui_packages="BrowserUI"
 ui_imports='^[[:space:]]*(@[A-Za-z_]+(\([^)]*\))?[[:space:]]+)*((public|internal|package|private|fileprivate)[[:space:]]+)?import[[:space:]]+((struct|class|enum|protocol|typealias|func|let|var)[[:space:]]+)?(AppKit|SwiftUI|Cocoa|UIKit)([.[:space:]]|$)'
 failures=0
 
@@ -29,6 +30,19 @@ for package in $core_packages; do
         echo "FAIL: $package's manifest depends on BrowserUI" >&2
         failures=$((failures + 1))
     fi
+done
+
+# A package named in neither list would be built and tested but never checked.
+for directory in "$root"/Packages/*/; do
+    [ -d "$directory" ] || continue
+    package="$(basename "$directory")"
+    case " $core_packages $ui_packages " in
+        *" $package "*) ;;
+        *)
+            echo "FAIL: Packages/$package is in neither core_packages nor ui_packages in $(basename "$0")" >&2
+            failures=$((failures + 1))
+            ;;
+    esac
 done
 
 if [ "$failures" -gt 0 ]; then

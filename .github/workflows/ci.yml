@@ -45,7 +45,11 @@ jobs:
         continue-on-error: true
         run: |
           mkdir -p build/performance
-          make perf | tee build/performance/summary.txt
+          # Without pipefail the pipe reports tee's status, so a failed
+          # `make perf` would leave this step green and the note below unsent.
+          set -o pipefail
+          status=0
+          make perf | tee build/performance/summary.txt || status=$?
           {
             echo '### Performance'
             echo
@@ -53,6 +57,7 @@ jobs:
             cat build/performance/summary.txt
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
+          exit "$status"
 
       - name: Note a performance failure
         if: steps.performance.outcome == 'failure'

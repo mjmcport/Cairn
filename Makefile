@@ -12,7 +12,9 @@ DERIVED_DATA := build/DerivedData
 PERFORMANCE := build/performance
 DESTINATION := platform=macOS,arch=arm64
 SWIFT_SOURCES := App UITests Packages
-PACKAGES := TestSupport FileSystemCore FileMetadata FileOperations BrowserUI
+# Every folder under Packages that has a manifest, so a new package is tested
+# without being named here.
+PACKAGES := $(patsubst Packages/%/Package.swift,%,$(wildcard Packages/*/Package.swift))
 
 XCODEBUILD := xcodebuild -project $(PROJECT) -destination '$(DESTINATION)' \
 	-derivedDataPath $(DERIVED_DATA)

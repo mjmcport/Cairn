@@ -97,6 +97,36 @@ import Testing
     }
   }
 
+  @Test func listsAFolderReachedThroughASymbolicLink() async throws {
+    let tree = try FixtureTree.build {
+      FixtureNode.directory("Folder") {
+        FixtureNode.file("inside.txt")
+      }
+      FixtureNode.symlink("link", to: "Folder")
+      FixtureNode.file("file.txt")
+      FixtureNode.symlink("file-link", to: "file.txt")
+      FixtureNode.symlink("broken", to: "missing")
+    }
+    defer { try? tree.remove() }
+
+    #expect(names(try await DirectoryReader().items(in: tree.url("link"))) == ["inside.txt"])
+    // The spelling a launch argument produces, with a trailing slash.
+    let hinted = URL(filePath: tree.path("link"), directoryHint: .isDirectory)
+    #expect(names(try await DirectoryReader().items(in: hinted)) == ["inside.txt"])
+
+    await #expect(throws: DirectoryReadError.notADirectory(tree.url("file-link"))) {
+      try await DirectoryReader().items(in: tree.url("file-link"))
+    }
+    await #expect(throws: (any Error).self) {
+      try await DirectoryReader().items(in: tree.url("broken"))
+    }
+  }
+
+  @Test func theErrorForAFileSaysSoInWords() {
+    let error = DirectoryReadError.notADirectory(URL(filePath: "/fixture/notes.txt"))
+    #expect(error.localizedDescription == "notes.txt is not a folder.")
+  }
+
   @Test func aCancelledTaskThrowsCancellationError() async throws {
     let tree = try FixtureTree.build {
       FixtureNode.files(count: 10_000, in: "Big")
@@ -112,24 +142,28 @@ import Testing
   }
 
   @Test func cancellationStopsAListingThatIsUnderWay() async throws {
+    let interval = DirectoryReader.cancellationInterval
     let tree = try FixtureTree.build {
-      FixtureNode.files(count: 100_000, in: "Huge")
+      FixtureNode.files(count: interval * 4, in: "Many")
     }
     defer { try? tree.remove() }
-    let folder = tree.url("Huge")
+    let folder = tree.url("Many")
 
-    let clock = ContinuousClock()
-    let full = try await clock.measure { _ = try await DirectoryReader().items(in: folder) }
-
-    let task = Task { try await DirectoryReader().items(in: folder) }
-    try await Task.sleep(for: full / 10)
-    let cancelled = clock.now
-    task.cancel()
+    let checks = Recorded<[Int]>([])
+    let task = Task {
+      try DirectoryReader.readItems(in: folder) { itemsRead in
+        checks.value += [itemsRead]
+        // Cancel from inside the listing, once it is under way.
+        if itemsRead == interval {
+          withUnsafeCurrentTask { $0?.cancel() }
+        }
+      }
+    }
     await #expect(throws: CancellationError.self) {
       try await task.value
     }
-    // It stops at the next check, long before the listing would have finished.
-    #expect(clock.now - cancelled < full / 2)
+    // It stops at the check that follows the cancellation: nothing more is read.
+    #expect(checks.value == [0, interval])
   }
 
   @Test func runsOffTheMainThread() async throws {

@@ -47,4 +47,7 @@ expect fail "rejects a core manifest that depends on BrowserUI"
 make_tree; rm -rf "$work/tree/Packages/FileMetadata"
 expect fail "rejects a missing core package"
 
+make_tree; mkdir -p "$work/tree/Packages/NewPackage/Sources/NewPackage"
+expect fail "rejects a package that is in neither list"
+
 exit "$failed"

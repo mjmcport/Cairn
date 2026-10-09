@@ -22,14 +22,8 @@ final class DiagnosticsSubscriber: NSObject, MXMetricManagerSubscriber, Sendable
     let store = store
     // The system does not say which thread this runs on, so write elsewhere.
     Task.detached(priority: .utility) {
-      for report in reports {
-        do {
-          try store.save(report, kind: "diagnostic")
-        } catch {
-          Log.diagnostics.error("Could not save a diagnostic report: \(error.localizedDescription)")
-        }
-      }
-      Log.diagnostics.info("Saved \(reports.count) diagnostic report(s) locally")
+      let saved = store.saveAll(reports, kind: "diagnostic")
+      Log.diagnostics.info("Saved \(saved) of \(reports.count) diagnostic report(s) locally")
     }
   }
 }

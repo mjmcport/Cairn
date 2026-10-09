@@ -5,7 +5,7 @@ import FileSystemCore
 /// date. Every pane hosts one of these.
 @MainActor
 public final class BrowserViewController: NSViewController {
-  private enum Column: String, CaseIterable {
+  enum Column: String, CaseIterable {
     case name, size, modified
 
     var identifier: NSUserInterfaceItemIdentifier { .init("column-\(rawValue)") }
@@ -132,6 +132,8 @@ public final class BrowserViewController: NSViewController {
 
   /// Shows the folder that contains the current one. Sent by Go > Enclosing Folder.
   @objc public func goToEnclosingFolder(_ sender: Any?) {
+    // At the root there is nowhere to go, so a load under way is left to finish.
+    guard model.enclosingFolder != nil else { return }
     run { await $0.navigateToEnclosingFolder() }
   }
 
@@ -142,10 +144,15 @@ public final class BrowserViewController: NSViewController {
   private func open(row: Int) {
     guard model.items.indices.contains(row) else { return }
     let item = model.items[row]
+    // Opening a file does nothing yet, so a load under way is left to finish.
+    guard item.isNavigable else { return }
     run { await $0.open(item) }
   }
 
-  /// Runs a model action, cancelling one that is still loading.
+  /// Runs a model action that loads a folder, cancelling a load that is still
+  /// under way. An action that would do nothing must not come through here:
+  /// the cancelled load never publishes a result, so the browser would stay
+  /// in its loading state.
   private func run(_ action: @escaping @MainActor (BrowserModel) async -> Void) {
     loadTask?.cancel()
     loadTask = Task { [model] in await action(model) }
@@ -185,14 +192,31 @@ public final class BrowserViewController: NSViewController {
   /// Shown where an item has no value, as Finder does for a folder's size.
   static let missingValueText = "--"
 
-  static func sizeText(for item: FileItem) -> String {
-    guard let size = item.size else { return missingValueText }
-    return size.formatted(.byteCount(style: .file))
+  /// The size as text, or nil for an item that has none, such as a folder.
+  static func sizeText(for item: FileItem) -> String? {
+    item.size?.formatted(.byteCount(style: .file))
   }
 
-  static func modifiedText(for item: FileItem) -> String {
-    guard let date = item.modificationDate else { return missingValueText }
-    return date.formatted(date: .abbreviated, time: .shortened)
+  /// The modified date as text, or nil for an item that has none.
+  static func modifiedText(for item: FileItem) -> String? {
+    item.modificationDate?.formatted(date: .abbreviated, time: .shortened)
+  }
+
+  /// Fills a cell, new or recycled, with one item's value for a column.
+  static func fill(_ cell: NSTableCellView, column: Column, item: FileItem) {
+    let value: String? =
+      switch column {
+      case .name: item.name
+      case .size: sizeText(for: item)
+      case .modified: modifiedText(for: item)
+      }
+    cell.textField?.stringValue = value ?? missingValueText
+    // Dashes are not words, so both the cell and its text get a spoken
+    // replacement. Whether a value is missing comes from the item, never from
+    // the text shown: a file can be named "--".
+    let spokenText = value == nil ? column.missingValueSpokenText : nil
+    cell.setSpokenText(spokenText)
+    cell.textField?.setSpokenText(spokenText)
   }
 }
 
@@ -215,18 +239,7 @@ extension BrowserViewController: NSTableViewDataSource, NSTableViewDelegate {
     let cell =
       tableView.makeView(withIdentifier: cellIdentifier, owner: self) as? NSTableCellView
       ?? Self.makeCell(identifier: cellIdentifier, column: column)
-
-    let text =
-      switch column {
-      case .name: item.name
-      case .size: Self.sizeText(for: item)
-      case .modified: Self.modifiedText(for: item)
-      }
-    cell.textField?.stringValue = text
-    // Dashes are not words, so both the cell and its text get a spoken replacement.
-    let spokenText = text == Self.missingValueText ? column.missingValueSpokenText : nil
-    cell.setSpokenText(spokenText)
-    cell.textField?.setSpokenText(spokenText)
+    Self.fill(cell, column: column, item: item)
     return cell
   }
 

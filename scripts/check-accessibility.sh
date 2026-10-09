@@ -10,6 +10,10 @@ helper="Packages/BrowserUI/Sources/BrowserUI/Accessibility.swift"
 direct_calls='setAccessibilityIdentifier\(|setAccessibilityLabel\(|NSUserInterfaceItemIdentifier\("'
 failures=0
 
+# Split the file list on newlines only, so a path with a space stays one file.
+old_ifs="$IFS"
+IFS='
+'
 for file in $(find "$root/App" "$root/Packages/BrowserUI/Sources" -name '*.swift' 2>/dev/null); do
     relative="${file#"$root"/}"
     [ "$relative" = "$helper" ] && continue
@@ -20,6 +24,7 @@ for file in $(find "$root/App" "$root/Packages/BrowserUI/Sources" -name '*.swift
         failures=$((failures + 1))
     fi
 done
+IFS="$old_ifs"
 
 if [ "$failures" -gt 0 ]; then
     echo "$failures accessibility-convention check(s) failed" >&2
