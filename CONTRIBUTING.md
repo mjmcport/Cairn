@@ -50,7 +50,18 @@ Cairn is MIT licensed, and every line in it must be compatible with that.
 3. Run `make test` and `make uitest`.
 4. Fill in the pull-request template.
 
-CI runs the same `make` tasks on every push to `main` and every pull request: `bootstrap`, `lint`, `build`, `test`, `uitest` and `perf`. A pull request needs a green **Build and test** check.
+CI runs the same `make` tasks, in two tiers:
+
+- **Full tier**, on every pull request and every push to `main`: `bootstrap`, `lint`, `build`, `test`, `uitest` and `perf`.
+- **Light tier**, on a push to any other branch: `bootstrap`, `lint`, `build` and `test`. If the branch already has an open pull request, the push runs only a short Linux job that finds it, because the pull-request run covers the commit.
+
+A change that touches only documents (`*.md`, `plans/`, `docs/`) starts no run. A push is judged by the commits pushed, but a pull request is judged by its whole diff, so a docs-only commit added to a pull request that also changes code still runs.
+
+A pull request needs a green **Build and test** check.
+
+### What a run costs
+
+The repository is private, and GitHub counts a macOS minute ten times. A full run takes about 5 minutes, so it costs about 50 billed minutes. GitHub's published allowance for the free plan is 2,000 minutes a month, which is about 40 full runs. Every run prints its duration and its billed minutes in its last step and in the run summary.
 
 ## Conduct
 

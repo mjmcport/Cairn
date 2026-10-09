@@ -1,24 +1,77 @@
 name: CI
 
+# A change that touches only documents starts no run. A push is judged by the
+# commits pushed; a pull request is judged by its whole diff.
 on:
   push:
-    branches: [main]
+    paths-ignore:
+      - "**.md"
+      - "plans/**"
+      - "docs/**"
   pull_request:
+    paths-ignore:
+      - "**.md"
+      - "plans/**"
+      - "docs/**"
 
 # A newer push to the same branch or pull request replaces the run in progress.
+# Not on main: there each run gets a group of its own, so a second push neither
+# cancels the first run nor drops it from the queue (GitHub keeps only one
+# pending run per group), and every push to main gets a result and a build.
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  group: ci-${{ github.workflow }}-${{ github.ref }}${{ github.ref == 'refs/heads/main' && format('-{0}', github.run_id) || '' }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 permissions:
   contents: read
 
 jobs:
+  # A push to a branch with an open pull request fires both events. The
+  # pull-request run covers the commit, so the macOS job is skipped for the
+  # push. This job costs Linux minutes, a tenth of the macOS rate.
+  pull-request-lookup:
+    name: Look for an open pull request
+    if: github.event_name == 'push' && github.ref != 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      pull-requests: read
+    outputs:
+      open: ${{ steps.lookup.outputs.open }}
+    steps:
+      - name: Look up pull requests for this branch
+        id: lookup
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD: ${{ github.repository_owner }}:${{ github.ref_name }}
+        run: |
+          # Only a count above zero skips the macOS job. A failed lookup, or
+          # an answer that is not a number, lets it run.
+          count="$(gh api --method GET "repos/$GITHUB_REPOSITORY/pulls" \
+            -f state=open -f head="$HEAD" --jq length)" || count=unknown
+          case "$count" in
+            '' | *[!0-9]*) open=false; echo "::warning title=Pull request lookup::The lookup failed ('$count'), so the build runs." ;;
+            0) open=false; echo "No open pull request for $HEAD: the build runs." ;;
+            *) open=true; echo "$count open pull request(s) for $HEAD: the pull-request run covers this push." ;;
+          esac
+          echo "open=$open" >> "$GITHUB_OUTPUT"
+
   check:
     name: Build and test
+    needs: pull-request-lookup
+    # Runs when the lookup was skipped (a pull request, or main), failed, or
+    # found no open pull request.
+    if: ${{ !cancelled() && needs.pull-request-lookup.outputs.open != 'true' }}
     runs-on: macos-26
     timeout-minutes: 45
+    env:
+      # The UI tests and the performance tests run only on pull requests and
+      # on main. Other pushes stop after the unit tests.
+      FULL_TIER: ${{ github.event_name == 'pull_request' || github.ref == 'refs/heads/main' }}
     steps:
+      - name: Record the start time
+        run: echo "CI_STARTED=$(date +%s)" >> "$GITHUB_ENV"
+
       - uses: actions/checkout@v4
 
       - name: Select Xcode
@@ -37,11 +90,14 @@ jobs:
         run: make test
 
       - name: UI tests
+        id: uitest
+        if: env.FULL_TIER == 'true'
         run: make uitest
 
       # Reported, not blocking: runner timings vary too much to gate on yet.
       - name: Performance tests
         id: performance
+        if: env.FULL_TIER == 'true'
         continue-on-error: true
         run: |
           mkdir -p build/performance
@@ -63,7 +119,7 @@ jobs:
         if: steps.performance.outcome == 'failure'
         run: echo "::warning title=Performance tests::The performance tests did not complete. See the Performance tests step."
 
-      # Every commit on main gets a downloadable build. It is signed ad hoc,
+      # Every push to main gets a downloadable build. It is signed ad hoc,
       # not with a Developer ID, and is not notarized.
       - name: Package
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -88,3 +144,7 @@ jobs:
             build/performance
           if-no-files-found: ignore
           retention-days: 7
+
+      - name: Duration
+        if: always()
+        run: scripts/ci-duration.sh "$CI_STARTED"
