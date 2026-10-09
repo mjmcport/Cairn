@@ -1,14 +1,15 @@
 #!/bin/sh
-# Proves that a clean clone builds with one command: copies every file git
-# would track (committed or not, ignoring ignored files) to a temporary folder
-# and runs `make all` there.
+# Proves that a clean clone builds with one command: copies the sources (no
+# build output, no git data) to a temporary folder and runs `make all` there.
+# The copy is not a git checkout, so this also proves the build and tests do
+# not depend on one.
 
 set -eu
 repo="$(cd "$(dirname "$0")/.." && pwd)"
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 
-(cd "$repo" && git ls-files -co --exclude-standard -z | xargs -0 tar -cf -) | (cd "$work" && tar -xf -)
+"$repo/scripts/copy-source-tree.sh" "$work"
 
 if [ -e "$work/Cairn.xcodeproj" ] || [ -e "$work/build" ]; then
     echo "FAIL: the clean copy contains generated files" >&2

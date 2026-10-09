@@ -8,7 +8,7 @@ trap 'rm -rf "$work"' EXIT
 failed=0
 
 # A copy of the tracked and unignored files, as its own repository.
-(cd "$repo" && git ls-files -co --exclude-standard -z | xargs -0 tar -cf -) | (cd "$work" && tar -xf -)
+"$repo/scripts/copy-source-tree.sh" "$work"
 cd "$work" || exit 1
 git init -q .
 git config user.name "Hook Test"

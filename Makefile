@@ -17,7 +17,7 @@ PACKAGES := TestSupport FileSystemCore FileMetadata FileOperations BrowserUI
 XCODEBUILD := xcodebuild -project $(PROJECT) -destination '$(DESTINATION)' \
 	-derivedDataPath $(DERIVED_DATA)
 
-.PHONY: all bootstrap generate build test uitest perf perf-baseline lint format clean clean-clone
+.PHONY: all bootstrap generate build test uitest perf perf-baseline package lint format clean clean-clone
 
 all: bootstrap build test
 
@@ -43,6 +43,7 @@ test: generate ## Run the script tests, the project-spec checks and every packag
 	scripts/test-performance.sh
 	scripts/test-pre-commit.sh
 	scripts/test-ci-select-xcode.sh
+	scripts/test-check-package.sh
 	@set -e; for package in $(PACKAGES); do \
 		echo "== $$package"; \
 		xcrun swift test --package-path Packages/$$package --scratch-path build/packages/$$package \
@@ -71,6 +72,10 @@ perf-baseline: ## Record this Mac's measurements as the new committed baseline
 	@$(MAKE) perf || true
 	@test -f $(PERFORMANCE)/latest.json
 	cp $(PERFORMANCE)/latest.json docs/performance/baseline.json
+
+package: generate ## Build the Release app, zip it into build/package and check the zip
+	$(XCODEBUILD) -scheme Cairn -configuration Release build
+	@scripts/check-package.sh "$$(scripts/package.sh $(DERIVED_DATA)/Build/Products/Release/Cairn.app build/package)"
 
 lint: ## Check governance files and Swift formatting
 	scripts/check-governance.sh

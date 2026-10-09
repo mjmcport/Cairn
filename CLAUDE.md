@@ -75,7 +75,12 @@ Recorded 2026-10-09 on the development Mac.
 | Signing identity | None yet |
 | Compound engineering plugin | 3.30.4 (`every-marketplace`) |
 
+## Status
+
+Phase 0 is complete (12 steps, one commit each). Its plans are in `plans/` and its lessons in `docs/solutions/`. Phase 1 (Finder-replacement core) is next.
+
 ## Open items
 
+- Branch protection on `main` is not enabled: GitHub's free plan refuses it on a private repository. Run `scripts/protect-main.sh` after upgrading to GitHub Pro or making the repository public.
 - Confirm the bundle ID before the first signed build.
 - Apple Developer Program membership is needed by the end of Phase 1, not for Phase 0.

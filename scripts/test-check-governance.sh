@@ -13,8 +13,8 @@ failed=0
 copy_repo() {
     rm -rf "$work/tree"
     mkdir -p "$work/tree"
-    # Only tracked and unignored files: build output would take minutes to copy.
-    (cd "$repo" && git ls-files -co --exclude-standard -z | xargs -0 tar -cf -) | (cd "$work/tree" && tar -xf -)
+    # Sources only: build output would take minutes to copy.
+    "$here/copy-source-tree.sh" "$work/tree"
 }
 
 expect_pass() {
