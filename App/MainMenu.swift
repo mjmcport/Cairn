@@ -1,4 +1,5 @@
 import AppKit
+import BrowserUI
 
 /// Builds the menu bar in code. The app has no storyboard or nib.
 @MainActor
@@ -25,6 +26,23 @@ enum MainMenu {
       keyEquivalent: "q"
     )
     mainMenu.addItem(submenuItem(titled: "Cairn", menu: appMenu))
+
+    let fileMenu = NSMenu()
+    fileMenu.addItem(
+      withTitle: "Open",
+      action: #selector(BrowserViewController.openSelection(_:)),
+      keyEquivalent: "o"
+    )
+    mainMenu.addItem(submenuItem(titled: "File", menu: fileMenu))
+
+    let goMenu = NSMenu()
+    let enclosingFolder = goMenu.addItem(
+      withTitle: "Enclosing Folder",
+      action: #selector(BrowserViewController.goToEnclosingFolder(_:)),
+      keyEquivalent: String(UnicodeScalar(NSUpArrowFunctionKey)!)
+    )
+    enclosingFolder.keyEquivalentModifierMask = [.command]
+    mainMenu.addItem(submenuItem(titled: "Go", menu: goMenu))
 
     let windowMenu = NSMenu(title: "Window")
     windowMenu.addItem(

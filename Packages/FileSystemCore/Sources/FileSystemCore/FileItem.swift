@@ -16,18 +16,59 @@ public struct FileItem: Sendable, Hashable, Identifiable {
   public let url: URL
   public let kind: Kind
   public let isHidden: Bool
+  /// The logical size in bytes, or `nil` for anything that is not a plain file.
+  public let size: Int64?
+  public let modificationDate: Date?
 
   public var id: URL { url }
 
   /// The last path component, as stored on disk.
   public var name: String { url.lastPathComponent }
 
-  /// Whether double-clicking the item navigates into it.
+  /// Whether opening the item navigates into it.
   public var isNavigable: Bool { kind == .directory }
 
-  public init(url: URL, kind: Kind, isHidden: Bool = false) {
+  public init(
+    url: URL,
+    kind: Kind,
+    isHidden: Bool = false,
+    size: Int64? = nil,
+    modificationDate: Date? = nil
+  ) {
     self.url = url
     self.kind = kind
     self.isHidden = isHidden
+    self.size = size
+    self.modificationDate = modificationDate
+  }
+}
+
+extension FileItem {
+  /// The resource keys a listing needs. Enumeration prefetches them, so
+  /// building an item never makes another file-system call.
+  public static let resourceKeys: Set<URLResourceKey> = [
+    .isDirectoryKey, .isSymbolicLinkKey, .isPackageKey, .isHiddenKey,
+    .fileSizeKey, .contentModificationDateKey,
+  ]
+
+  /// Builds an item from resource values read for ``resourceKeys``.
+  public init(url: URL, resourceValues values: URLResourceValues) {
+    let kind: Kind =
+      if values.isSymbolicLink == true {
+        .symbolicLink
+      } else if values.isPackage == true {
+        .package
+      } else if values.isDirectory == true {
+        .directory
+      } else {
+        .file
+      }
+    self.init(
+      url: url,
+      kind: kind,
+      isHidden: values.isHidden ?? false,
+      size: kind == .file ? values.fileSize.map(Int64.init) : nil,
+      modificationDate: values.contentModificationDate
+    )
   }
 }

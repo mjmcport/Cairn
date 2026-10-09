@@ -24,4 +24,10 @@ import Testing
   @Test func itemsAreNotHiddenByDefault() {
     #expect(!FileItem(url: URL(filePath: "/tmp/a"), kind: .file).isHidden)
   }
+
+  @Test func sizeAndDateAreAbsentUnlessGiven() {
+    let item = FileItem(url: URL(filePath: "/tmp/a"), kind: .file)
+    #expect(item.size == nil)
+    #expect(item.modificationDate == nil)
+  }
 }

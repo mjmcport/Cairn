@@ -1,8 +1,8 @@
 import AppKit
 import BrowserUI
 
-/// The application entry point. Opens one window that hosts a browser on the
-/// home folder; the list view arrives with the walking skeleton in step 5.
+/// The application entry point. Opens one window that lists a folder: the one
+/// named by `-OpenFolder <path>` at launch, or the home folder.
 @main
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
@@ -25,10 +25,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       backing: .buffered,
       defer: false
     )
-    window.contentViewController = BrowserViewController(
-      location: FileManager.default.homeDirectoryForCurrentUser)
+    let location = InitialLocation.resolve(
+      defaults: .standard,
+      fallback: FileManager.default.homeDirectoryForCurrentUser
+    )
+    // The window takes its title from the browser, which shows the folder name.
+    window.contentViewController = BrowserViewController(location: location)
     window.setContentSize(NSSize(width: 900, height: 600))
-    window.title = "Cairn"
     window.identifier = NSUserInterfaceItemIdentifier("main-window")
     window.isReleasedWhenClosed = false
     window.center()

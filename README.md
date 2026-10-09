@@ -4,7 +4,13 @@ Cairn is a native file manager for the Mac, written in Swift and AppKit. The goa
 
 ## Status
 
-**Phase 0 (foundation).** There is nothing to use yet. This phase builds the project skeleton, the test fixtures, continuous integration and a performance baseline. Phase 1 delivers the first build meant for daily use.
+**Phase 0 (foundation).** The app opens one window, lists a folder and navigates into subfolders. It cannot open, copy, move or delete anything yet. This phase builds the project skeleton, the test fixtures, continuous integration and a performance baseline. Phase 1 delivers the first build meant for daily use.
+
+To open the app on a folder of your choice after `make build`:
+
+```sh
+build/DerivedData/Build/Products/Debug/Cairn.app/Contents/MacOS/Cairn -OpenFolder ~/Documents
+```
 
 ## Requirements
 

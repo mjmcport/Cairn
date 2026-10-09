@@ -14,15 +14,3 @@ public enum MetadataGroup: String, Sendable, CaseIterable {
   case cloudState
   case volume
 }
-
-/// The metadata the list view needs for every row.
-public struct BasicMetadata: Sendable, Hashable {
-  /// The logical size in bytes, or `nil` for a folder.
-  public let size: Int64?
-  public let modificationDate: Date?
-
-  public init(size: Int64?, modificationDate: Date?) {
-    self.size = size
-    self.modificationDate = modificationDate
-  }
-}

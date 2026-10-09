@@ -29,6 +29,8 @@ settings:
 packages:
   BrowserUI:
     path: Packages/BrowserUI
+  TestSupport:
+    path: Packages/TestSupport
 
 targets:
   Cairn:
@@ -57,6 +59,7 @@ targets:
       - path: UITests
     dependencies:
       - target: Cairn
+      - package: TestSupport
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.mjmcport.cairn.uitests
