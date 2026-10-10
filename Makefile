@@ -12,6 +12,7 @@ DERIVED_DATA := build/DerivedData
 PERFORMANCE := build/performance
 # Where the UI tests record each accessibility audit and retry.
 AUDIT_LOG := build/accessibility/audits.log
+UITEST_OUTPUT := build/accessibility/uitest-output.log
 DESTINATION := platform=macOS,arch=arm64
 SWIFT_SOURCES := App UITests Packages
 # Every folder under Packages that has a manifest, so a new package is tested
@@ -59,10 +60,15 @@ test: generate ## Run the script tests, the project-spec checks and every packag
 	done
 
 uitest: generate ## Run the end-to-end tests
-	@mkdir -p $(dir $(AUDIT_LOG)) && rm -f $(AUDIT_LOG)
-	@# xcodebuild hands a TEST_RUNNER_ variable to the test process without the prefix.
-	TEST_RUNNER_CAIRN_AUDIT_LOG="$(CURDIR)/$(AUDIT_LOG)" \
-		$(XCODEBUILD) -scheme CairnUITests -skip-testing:CairnUITests/PerformanceTests test
+	@mkdir -p $(dir $(AUDIT_LOG)) && rm -f $(AUDIT_LOG) $(UITEST_OUTPUT)
+	@# The UI test runner is sandboxed and cannot write the audit log itself. It
+	@# logs each audit, xcodebuild prints the log, and the records are taken
+	@# from what was printed. The tests' own result is the exit status.
+	@status=0; $(XCODEBUILD) -scheme CairnUITests -skip-testing:CairnUITests/PerformanceTests test \
+		> $(UITEST_OUTPUT) 2>&1 || status=$$?; \
+	cat $(UITEST_OUTPUT); \
+	scripts/accessibility-retries.py extract $(UITEST_OUTPUT) --output $(AUDIT_LOG); \
+	exit $$status
 
 perf: generate ## Run the performance tests and compare them with the committed baseline
 	@mkdir -p $(PERFORMANCE)

@@ -22,3 +22,10 @@ Written before any of this ran on CI. Measured durations and anything the runs t
 
 - Unproved until the first runs: the `**.md` path filter, the job condition that lets the build run when the lookup job is skipped, whether the UI test process can write to `build/accessibility/`, and whether the `macos-15` runner has an Xcode 26 that compiles the code.
 - If the UI tests are green on CI but the audit summary says the recording is broken, the test process could not write the log. Look at the test bundle's sandbox settings before anything else.
+
+## What the first runs on a runner showed
+
+- **The UI test runner is sandboxed.** Its entitlements give it read-only access to the disk, so a test cannot write a file in the checkout, and a `TEST_RUNNER_` variable naming one does not help. The audit recorder's first version wrote nothing on the runner; the summary step failed the run, which is what "a run with no audits is broken" was for. Records now go to the test log as marked lines that `make uitest` extracts from `xcodebuild`'s output. To hand data out of a UI test, log it or attach it; do not write a file. The entitlements are in `build/DerivedData/Build/Intermediates.noindex/Cairn.build/Debug/CairnUITests.build/CairnUITests.xctest.xcent`.
+- **On macOS 15 the parent of `/` is `/..`.** `URL(filePath: "/").deletingLastPathComponent()` returns a URL whose path is `/..` on macOS 15 and `/` on macOS 26 and 27. Enclosing Folder at the root therefore navigated to a folder that does not exist. The first macOS 15 run caught it in two unit tests. Recognize the root by its path components, not by comparing a location with its parent.
+- **The printed duration starts at the job's first step.** Runner setup before it is billed too, so a run printed as 1 min 59 s was billed as 3 minutes. Read the printed figure as a floor.
+

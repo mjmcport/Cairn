@@ -1,12 +1,17 @@
 #!/usr/bin/env python3
 """Counts accessibility-audit retries and gates on them over recent runs.
 
+    accessibility-retries.py extract TEST_OUTPUT --output LOG
     accessibility-retries.py summarize LOG [--run ID] [--output record.json]
     accessibility-retries.py check RECORD HISTORY_FOLDER
     accessibility-retries.py limits
 
-`summarize` reads the audit log the UI tests write (one "audit<TAB>screen" or
-"retry<TAB>screen" line each), prints a Markdown summary and, with --output,
+`extract` reads what `xcodebuild` printed during the UI tests and writes the
+audit log: one "audit<TAB>screen" or "retry<TAB>screen" line for each record
+the tests logged. The tests cannot write the file themselves, because the UI
+test runner is sandboxed. A record the output shows twice is written once.
+
+`summarize` reads that audit log, prints a Markdown summary and, with --output,
 writes this run's record. A log with no audits means the recording is broken,
 and exits 1.
 
@@ -23,6 +28,7 @@ with CONTRIBUTING.md.
 import argparse
 import json
 import os
+import re
 import sys
 from datetime import datetime, timezone
 
@@ -31,6 +37,30 @@ from datetime import datetime, timezone
 # ("The accessibility audit's one retry"); change both together.
 WINDOW = 20
 THRESHOLD = 3
+
+
+# A record in the UI tests' output: the marker, an identifier, the event and
+# the screen, separated by tabs (AuditLog.logLine in TestSupport).
+RECORD = re.compile(r"CAIRN_AUDIT\t([0-9A-Fa-f-]{36})\t(audit|retry)\t(.*)$")
+
+
+def command_extract(arguments):
+    try:
+        with open(arguments.test_output, errors="replace") as output:
+            lines = output.read().splitlines()
+    except OSError as error:
+        print(f"Could not read {arguments.test_output}: {error}", file=sys.stderr)
+        return 1
+    seen, records = set(), []
+    for line in lines:
+        match = RECORD.search(line)
+        if match and match.group(1) not in seen:
+            seen.add(match.group(1))
+            records.append(f"{match.group(2)}\t{match.group(3)}\n")
+    with open(arguments.output, "w") as log:
+        log.writelines(records)
+    print(f"Extracted {plural(len(records), 'audit record', 'audit records')} from {arguments.test_output}")
+    return 0
 
 
 def plural(count, word, many):
@@ -162,6 +192,11 @@ def command_limits(arguments):
 def main():
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     commands = parser.add_subparsers(dest="command", required=True)
+
+    extract = commands.add_parser("extract")
+    extract.add_argument("test_output")
+    extract.add_argument("--output", required=True)
+    extract.set_defaults(run_command=command_extract)
 
     summarize = commands.add_parser("summarize")
     summarize.add_argument("log")

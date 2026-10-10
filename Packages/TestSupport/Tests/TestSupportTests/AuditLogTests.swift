@@ -68,4 +68,18 @@ import Testing
       #expect(written == ["audit\tFirst", "audit\tSecond"])
     }
   }
+
+  /// The format `scripts/accessibility-retries.py extract` looks for.
+  @Test func aLogLineIsTheMarkerAnIdentifierTheEventAndTheScreen() {
+    let identifier = UUID(uuidString: "11111111-1111-4111-8111-111111111111")!
+    let line = AuditLog.logLine(event: "retry", screen: "Empty folder", identifier: identifier)
+    #expect(line == "CAIRN_AUDIT\t11111111-1111-4111-8111-111111111111\tretry\tEmpty folder")
+  }
+
+  @Test func twoLogLinesForTheSameRecordDifferOnlyInTheIdentifier() {
+    let first = AuditLog.logLine(event: "audit", screen: "Sidebar")
+    let second = AuditLog.logLine(event: "audit", screen: "Sidebar")
+    #expect(first != second)
+    #expect(first.split(separator: "\t").count == 4)
+  }
 }

@@ -84,8 +84,11 @@ public final class BrowserModel {
 
   /// The folder that contains the current one, or nil at the root.
   public var enclosingFolder: URL? {
-    let parent = location.deletingLastPathComponent()
-    return parent.path == location.path ? nil : parent
+    // The root is recognized by its components, not by asking for its parent:
+    // on macOS 15 the parent of "/" comes back as "/..", which is not "/".
+    let current = location.standardizedFileURL
+    guard current.pathComponents.count > 1 else { return nil }
+    return current.deletingLastPathComponent()
   }
 
   /// Shows the folder that contains the current one. Does nothing at the root.

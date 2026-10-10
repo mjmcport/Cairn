@@ -40,6 +40,50 @@ check() { # check -- runs the window check; sets $output and $status
     status=$?
 }
 
+# --- extract
+id1=11111111-1111-4111-8111-111111111111
+id2=22222222-2222-4222-8222-222222222222
+id3=33333333-3333-4333-8333-333333333333
+{
+    echo "Test Case '-[CairnUITests.AccessibilityTests testAuditPassesOnAnEmptyFolder]' started."
+    printf '2026-10-09 21:20:01.123 CairnUITests-Runner[411:9001] CAIRN_AUDIT\t%s\taudit\tEmpty folder\n' "$id1"
+    printf '2026-10-09 21:20:05.456 CairnUITests-Runner[411:9001] CAIRN_AUDIT\t%s\tretry\tEmpty folder\n' "$id2"
+    # The same record printed a second time is one record.
+    printf 'CAIRN_AUDIT\t%s\tretry\tEmpty folder\n' "$id2"
+    printf 'CAIRN_AUDIT\t%s\taudit\tPopulated folder\n' "$id3"
+    # Not records: no identifier, and an event the tests never log.
+    printf 'CAIRN_AUDIT\taudit\tNo identifier\n'
+    printf 'CAIRN_AUDIT\t%s\tskip\tUnknown event\n' "$id1"
+} > "$work/test output.log"
+output="$(python3 "$tool" extract "$work/test output.log" --output "$work/extracted.log" 2>&1)"
+status=$?
+expected="$(printf 'audit\tEmpty folder\nretry\tEmpty folder\naudit\tPopulated folder')"
+[ "$status" -eq 0 ] && [ "$(cat "$work/extracted.log")" = "$expected" ] \
+    && ok "extract keeps each logged record once, in order" \
+    || not_ok "extract keeps each logged record once, in order ($status: $output: $(cat "$work/extracted.log" 2>&1))"
+
+output="$(python3 "$tool" summarize "$work/extracted.log" 2>&1)"
+case "$output" in
+    *"Audits run: 2"*"Retries after a timeout: 1 (Empty folder)"*) ok "an extracted log is summarized" ;;
+    *) not_ok "an extracted log is summarized ($output)" ;;
+esac
+
+echo "Testing started" > "$work/test output.log"
+python3 "$tool" extract "$work/test output.log" --output "$work/extracted.log" > /dev/null 2>&1
+output="$(python3 "$tool" summarize "$work/extracted.log" 2>&1)"
+status=$?
+case "$status:$output" in
+    1:*"the recording is broken"*) ok "test output with no records gives a log that fails the summary" ;;
+    *) not_ok "test output with no records gives a log that fails the summary ($status: $output)" ;;
+esac
+
+output="$(python3 "$tool" extract "$work/missing.log" --output "$work/extracted.log" 2>&1)"
+status=$?
+case "$status:$output" in
+    1:*"Could not read"*) ok "extract fails on test output that is not there" ;;
+    *) not_ok "extract fails on test output that is not there ($status: $output)" ;;
+esac
+
 # --- summarize
 
 write_log "$work/audits.log" "audit:Populated folder" "audit:Empty folder" "audit:Unlistable folder"

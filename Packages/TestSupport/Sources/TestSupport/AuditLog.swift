@@ -1,21 +1,26 @@
 import Foundation
 
 /// Records each accessibility audit a UI test runs, and each retry after a
-/// timeout, as one line in a file. `scripts/accessibility-retries.py` counts
-/// the lines after the run.
+/// timeout. `scripts/accessibility-retries.py` counts the records after the
+/// run.
 ///
-/// The file is named by the `CAIRN_AUDIT_LOG` environment variable, which
-/// `make uitest` sets. Without the variable nothing is recorded, so running
-/// the tests from Xcode is unchanged.
+/// Every record goes to the test process's log as one marked line, which
+/// `xcodebuild` prints and `make uitest` collects. The UI test runner is
+/// sandboxed and can only read the disk outside its container, so it cannot
+/// write a file in the checkout. A process that is not sandboxed can also
+/// name a file in the `CAIRN_AUDIT_LOG` environment variable and get the
+/// same records there, one "event<TAB>screen" line each.
 ///
-/// Every audit is recorded, not only the retries, because a file with no
+/// Every audit is recorded, not only the retries, because a run with no
 /// retries would otherwise look the same as a recorder that never ran.
 public struct AuditLog: Sendable {
-  /// The variable that names the file. `xcodebuild` passes a variable set as
-  /// `TEST_RUNNER_CAIRN_AUDIT_LOG` to the test process under this name.
+  /// Starts every record in the test process's log.
+  public static let marker = "CAIRN_AUDIT"
+
+  /// The variable that names the optional file.
   public static let environmentVariable = "CAIRN_AUDIT_LOG"
 
-  /// The file lines are appended to, or `nil` when nothing is recorded.
+  /// The file lines are also appended to, or `nil` for the log alone.
   public let url: URL?
 
   /// - Parameter environment: Read for ``environmentVariable``. Defaults to
@@ -35,10 +40,19 @@ public struct AuditLog: Sendable {
     append("retry", screen)
   }
 
-  /// Appends `event`, a tab, `screen` and a newline. A line that cannot be
+  /// The marked line for one record: the marker, an identifier, the event
+  /// and the screen, separated by tabs. The identifier lets the counting
+  /// script drop a line the log shows twice.
+  public static func logLine(event: String, screen: String, identifier: UUID = UUID()) -> String {
+    "\(marker)\t\(identifier.uuidString)\t\(event)\t\(screen)"
+  }
+
+  /// Writes the record to the log and, when a file is named, appends
+  /// `event`, a tab, `screen` and a newline to it. A line that cannot be
   /// written is dropped: the counting script fails a run that recorded no
   /// audits, so a broken recorder does not pass unnoticed.
   private func append(_ event: String, _ screen: String) {
+    NSLog("%@", Self.logLine(event: event, screen: screen))
     guard let url else { return }
     // O_APPEND, so lines from another instance or process are kept.
     let descriptor = open(url.path, O_WRONLY | O_APPEND | O_CREAT, 0o644)

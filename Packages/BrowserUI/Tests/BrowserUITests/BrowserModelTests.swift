@@ -82,6 +82,11 @@ import Testing
     #expect(root.enclosingFolder == nil)
     await root.navigateToEnclosingFolder()
     #expect(root.location.path == "/")
+
+    // A location that only standardizes to the root is the root too.
+    let dotted = BrowserModel(
+      location: URL(filePath: "/Users/.."), reader: StubReader(results: [:]))
+    #expect(dotted.enclosingFolder == nil)
   }
 
   @Test func aFailedListingClearsTheItemsAndReportsWhy() async throws {
