@@ -48,7 +48,9 @@ test: generate ## Run the script tests, the project-spec checks and every packag
 	scripts/test-pre-commit.sh
 	scripts/test-ci-select-xcode.sh
 	scripts/test-ci-duration.sh
+	scripts/test-ci-pull-request-lookup.sh
 	scripts/test-accessibility-retries.sh
+	scripts/test-ci-download-audit-records.sh
 	scripts/test-check-package.sh
 	@set -e; for package in $(PACKAGES); do \
 		echo "== $$package"; \

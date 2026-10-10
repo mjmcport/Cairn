@@ -64,7 +64,7 @@ The system's accessibility audit sometimes times out without reporting an issue,
 CI runs the same `make` tasks, in two tiers:
 
 - **Full tier**, on every pull request and every push to `main`: `bootstrap`, `lint`, `build`, `test`, `uitest` and `perf`.
-- **Light tier**, on a push to any other branch: `bootstrap`, `lint`, `build` and `test`. If the branch already has an open pull request, the push runs only a short Linux job that finds it, because the pull-request run covers the commit.
+- **Light tier**, on a push to any other branch: `bootstrap`, `lint`, `build` and `test`. If the branch already has an open pull request that GitHub reports as mergeable at the pushed commit, the push runs only a short Linux job that finds it, because the pull-request run covers the commit. The light tier runs when the pull request has a merge conflict, because GitHub then starts no pull-request run, and whenever the lookup fails or gets no clear answer after a short wait.
 
 A change that touches only documents (`*.md`, `plans/`, `docs/`) starts no run. A push is judged by the commits pushed, but a pull request is judged by its whole diff, so a docs-only commit added to a pull request that also changes code still runs.
 

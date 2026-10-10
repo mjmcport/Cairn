@@ -26,42 +26,38 @@ permissions:
   contents: read
 
 jobs:
-  # A push to a branch with an open pull request fires both events. The
-  # pull-request run covers the commit, so the macOS job is skipped for the
-  # push. This job costs Linux minutes, a tenth of the macOS rate.
+  # A push to a branch with an open pull request fires both events. When the
+  # pull-request run covers the commit, the macOS job is skipped for the push.
+  # GitHub starts no pull-request run while the pull request has a merge
+  # conflict, so the script answers `covered=true` only for a pull request
+  # GitHub reports mergeable at this commit. This job costs Linux minutes, a
+  # tenth of the macOS rate.
   pull-request-lookup:
     name: Look for an open pull request
     if: github.event_name == 'push' && github.ref != 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
+      # To check out the script.
+      contents: read
       pull-requests: read
     outputs:
-      open: ${{ steps.lookup.outputs.open }}
+      covered: ${{ steps.lookup.outputs.covered }}
     steps:
+      - uses: actions/checkout@v4
+
       - name: Look up pull requests for this branch
         id: lookup
         env:
           GH_TOKEN: ${{ github.token }}
-          HEAD: ${{ github.repository_owner }}:${{ github.ref_name }}
-        run: |
-          # Only a count above zero skips the macOS job. A failed lookup, or
-          # an answer that is not a number, lets it run.
-          count="$(gh api --method GET "repos/$GITHUB_REPOSITORY/pulls" \
-            -f state=open -f head="$HEAD" --jq length)" || count=unknown
-          case "$count" in
-            '' | *[!0-9]*) open=false; echo "::warning title=Pull request lookup::The lookup failed ('$count'), so the build runs." ;;
-            0) open=false; echo "No open pull request for $HEAD: the build runs." ;;
-            *) open=true; echo "$count open pull request(s) for $HEAD: the pull-request run covers this push." ;;
-          esac
-          echo "open=$open" >> "$GITHUB_OUTPUT"
+        run: scripts/ci-pull-request-lookup.sh >> "$GITHUB_OUTPUT"
 
   check:
     name: Build and test
     needs: pull-request-lookup
     # Runs when the lookup was skipped (a pull request, or main), failed, or
-    # found no open pull request.
-    if: ${{ !cancelled() && needs.pull-request-lookup.outputs.open != 'true' }}
+    # did not answer that a pull-request run covers the commit.
+    if: ${{ !cancelled() && needs.pull-request-lookup.outputs.covered != 'true' }}
     runs-on: macos-26
     timeout-minutes: 45
     permissions:
@@ -127,22 +123,7 @@ jobs:
         continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
-        run: |
-          # More than the window needs: this run's own record may be listed,
-          # and the tool takes the newest ones.
-          gh api --method GET "repos/$GITHUB_REPOSITORY/actions/artifacts" -f per_page=100 \
-            --jq '[.artifacts[] | select(.expired | not) | select(.name | startswith("accessibility-audits-"))]
-                  | sort_by(.created_at) | reverse | .[:30][] | "\(.id) \(.name)"' \
-            > build/accessibility/artifacts.txt
-          mkdir -p build/accessibility/history
-          while read -r id name; do
-            # A record that cannot be fetched is left empty; the tool names it.
-            record="build/accessibility/history/$name.json"
-            gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$id/zip" > build/accessibility/artifact.zip \
-              && unzip -p build/accessibility/artifact.zip record.json > "$record" \
-              || : > "$record"
-          done < build/accessibility/artifacts.txt
-          echo "Listed $(wc -l < build/accessibility/artifacts.txt | tr -d ' ') earlier record(s)"
+        run: scripts/ci-download-audit-records.sh build/accessibility
 
       # Fails when this run retried and the last 20 full-suite runs then hold
       # more than 3 retries. The numbers are in the script and CONTRIBUTING.md.
