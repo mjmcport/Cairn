@@ -72,9 +72,19 @@ A pull request needs a green **Build and test** check.
 
 ### What a run costs
 
-The repository is private, and GitHub counts a macOS minute ten times. A full run takes about 5 minutes, so it costs about 50 billed minutes. GitHub's published allowance for the free plan is 2,000 minutes a month, which is about 40 full runs. Every run prints its duration and its billed minutes in its last step and in the run summary.
+The repository is private, and GitHub counts a macOS minute ten times and rounds each job up to a whole minute. Measured on 2026-10-09:
 
-A second workflow builds and tests on macOS 15, the minimum supported version, once a week. It is expected to take about 6 minutes: 60 billed minutes a run, about 260 a month. Its last step prints that monthly figure and raises a warning when it passes about 300, which one second over 6 minutes does, because billing rounds up to 70 minutes a run and about 303 a month.
+| Run | Job time | Billed minutes |
+| --- | --- | --- |
+| Full: a pull request or a push to `main` | 4 min 47 s to 5 min 7 s | 50 to 60 |
+| Light: a push to a branch with no pull request | 2 min 3 s | 30, plus 1 for the lookup |
+| A push to a branch with a mergeable pull request | 5 s on Linux | 1 |
+| A docs-only change | no run | 0 |
+| macOS 15, weekly | 2 min 30 s | 30, about 130 a month |
+
+GitHub's published allowance for the free plan is 2,000 minutes a month, which is about 33 full runs at 60. Every run prints its duration and its billed minutes in its last step and in the run summary. The printed time starts at the job's first step, so the bill can be one minute, ten billed minutes, more than the printed figure.
+
+The macOS 15 workflow's last step also prints its monthly figure and raises a warning when that passes about 300, which a run of just over 6 minutes does.
 
 ## Conduct
 
