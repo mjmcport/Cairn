@@ -13,6 +13,18 @@ PERFORMANCE := build/performance
 # Where the UI tests record each accessibility audit and retry.
 AUDIT_LOG := build/accessibility/audits.log
 UITEST_OUTPUT := build/accessibility/uitest-output.log
+
+# Which end-to-end tests `make uitest` runs: `full` for all of them, or
+# `audits` for the accessibility class alone, which is what the weekly
+# macOS 15 run uses to stay inside its budget.
+UITEST_SUITE ?= full
+ifeq ($(UITEST_SUITE),full)
+UITEST_SELECTION := -skip-testing:CairnUITests/PerformanceTests
+else ifeq ($(UITEST_SUITE),audits)
+UITEST_SELECTION := -only-testing:CairnUITests/AccessibilityTests
+else
+$(error UITEST_SUITE must be 'full' or 'audits', not '$(UITEST_SUITE)')
+endif
 DESTINATION := platform=macOS,arch=arm64
 SWIFT_SOURCES := App UITests Packages
 # Every folder under Packages that has a manifest, so a new package is tested
@@ -49,6 +61,7 @@ test: generate ## Run the script tests, the project-spec checks and every packag
 	scripts/test-pre-commit.sh
 	scripts/test-ci-select-xcode.sh
 	scripts/test-ci-duration.sh
+	scripts/test-uitest-suite.sh
 	scripts/test-check-workflow-paths.sh
 	scripts/check-workflow-paths.py
 	scripts/test-ci-pull-request-lookup.sh
@@ -66,7 +79,7 @@ uitest: generate ## Run the end-to-end tests
 	@# The UI test runner is sandboxed and cannot write the audit log itself. It
 	@# logs each audit, xcodebuild prints the log, and the records are taken
 	@# from what was printed. The tests' own result is the exit status.
-	@status=0; $(XCODEBUILD) -scheme CairnUITests -skip-testing:CairnUITests/PerformanceTests test \
+	@status=0; $(XCODEBUILD) -scheme CairnUITests $(UITEST_SELECTION) test \
 		> $(UITEST_OUTPUT) 2>&1 || status=$$?; \
 	cat $(UITEST_OUTPUT); \
 	scripts/accessibility-retries.py extract $(UITEST_OUTPUT) --output $(AUDIT_LOG); \

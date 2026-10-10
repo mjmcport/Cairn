@@ -80,13 +80,14 @@ The repository is private, and GitHub counts a macOS minute ten times and rounds
 | Light: a push to a branch with no pull request | about 2 min | 30, plus 1 for the lookup |
 | A push to a branch with a mergeable pull request | 5 s on Linux | 1 |
 | A docs-only change | under 1 min on Linux | 1 |
-| macOS 15, weekly or by hand | 4 min 40 s to 5 min 2 s | 50 to 60, about 216 to 260 a month |
+| macOS 15 by hand, every end-to-end test | 4 min 40 s to 5 min 2 s | 50 to 60 |
+| macOS 15 weekly, unit tests and the accessibility end-to-end tests | not yet measured | not yet measured |
 
 The full run grew from 50 to 60 billed minutes to 80 when the end-to-end suite went from 8 tests to 16; each test launches the app. The light figure was measured on 2026-10-09 and has not been measured again.
 
 GitHub's published allowance for the free plan is 2,000 minutes a month, which is about 25 full runs at 80. Every run prints its duration and its billed minutes in its last step and in the run summary. The printed time starts at the job's first step, so the bill can be one minute, ten billed minutes, more than the printed figure.
 
-The macOS 15 workflow's last step also prints its monthly figure and raises a warning when that passes about 300, which a run of just over 6 minutes does. It is now within about a minute of that mark, so the next few end-to-end tests will take it over; run it less often or trim what it runs before then.
+The weekly macOS 15 run is trimmed to the unit tests and the accessibility end-to-end tests (`make uitest UITEST_SUITE=audits`), to keep it under about 300 billed minutes a month. Its last step prints its monthly figure and raises a warning when that passes about 300. Started by hand (`gh workflow run macos-15.yml --ref <branch>`), the workflow runs every end-to-end test.
 
 ## Conduct
 

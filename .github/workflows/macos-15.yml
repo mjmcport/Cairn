@@ -1,12 +1,21 @@
 name: macOS 15
 
-# The minimum supported macOS, built and tested once a week. It also runs on a
-# pull request that changes this file or the Xcode selection script, because
-# workflow_dispatch only works once the workflow is on the default branch.
+# The minimum supported macOS. Once a week it builds, runs the unit tests and
+# runs the accessibility end-to-end tests: the audits and the keyboard-only
+# tests, which are where macOS versions have differed. Started by hand, it runs
+# every end-to-end test; do that on a branch before merging a step that leans
+# on AppKit behaviour. It also runs in full on a pull request that changes this
+# file or the Xcode selection script.
 on:
   schedule:
     - cron: "23 5 * * 1"
   workflow_dispatch:
+    inputs:
+      suite:
+        description: End-to-end tests to run
+        type: choice
+        options: [full, audits]
+        default: full
   pull_request:
     paths:
       - .github/workflows/macos-15.yml
@@ -24,6 +33,10 @@ jobs:
     name: Build and test on macOS 15
     runs-on: macos-15
     timeout-minutes: 45
+    env:
+      # The weekly run is trimmed; every other start runs what it was asked
+      # for, and everything when it was not asked.
+      UITEST_SUITE: ${{ github.event_name == 'schedule' && 'audits' || inputs.suite || 'full' }}
     steps:
       - name: Record the start time
         run: echo "CI_STARTED=$(date +%s)" >> "$GITHUB_ENV"
@@ -44,6 +57,7 @@ jobs:
             echo "- macOS: $(sw_vers -productVersion) ($(sw_vers -buildVersion))"
             echo "- Xcode: $(xcodebuild -version | tr '\n' ' ')"
             echo "- Swift: $(xcrun swift --version 2>&1 | sed -n 1p)"
+            echo "- End-to-end tests: $UITEST_SUITE"
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Bootstrap
@@ -57,7 +71,7 @@ jobs:
 
       - name: UI tests
         id: uitest
-        run: make uitest
+        run: make uitest UITEST_SUITE="$UITEST_SUITE"
 
       # Shown only. These retries are not gated and do not count toward the
       # macOS 26 window in ci.yml.

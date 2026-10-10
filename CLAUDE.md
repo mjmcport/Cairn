@@ -47,7 +47,7 @@ Read `docs/solutions/` before planning a step.
 - Never start a new step or push on top of a red CI run. After each push, wait for CI with `gh run watch` and fix a red run before continuing.
 - Commit after every step. Push at milestones, not after every commit.
 - Starting in Phase 1, work on a branch and open a pull request. Merge only when CI is green, so `main` stays green.
-- A weekly workflow, `.github/workflows/macos-15.yml`, builds the app and runs the unit and UI tests on a macOS 15 runner. Treat a red weekly run like red CI: fix it before starting a new step. If it is unstable or its cost passes about 300 billed minutes a month, tell the user; do not drop a test to fix either.
+- A weekly workflow, `.github/workflows/macos-15.yml`, builds the app and runs the unit tests and the accessibility end-to-end tests on a macOS 15 runner. Before merging a step that leans on AppKit behaviour, run every end-to-end test there by hand: `gh workflow run macos-15.yml --ref <branch>`. Treat a red weekly run like red CI: fix it before starting a new step. If it is unstable or its cost passes about 300 billed minutes a month, tell the user; do not drop a test to fix either.
 
 ## Repository layout
 
