@@ -49,6 +49,8 @@ test: generate ## Run the script tests, the project-spec checks and every packag
 	scripts/test-pre-commit.sh
 	scripts/test-ci-select-xcode.sh
 	scripts/test-ci-duration.sh
+	scripts/test-check-workflow-paths.sh
+	scripts/check-workflow-paths.py
 	scripts/test-ci-pull-request-lookup.sh
 	scripts/test-accessibility-retries.sh
 	scripts/test-ci-download-audit-records.sh

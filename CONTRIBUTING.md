@@ -66,7 +66,7 @@ CI runs the same `make` tasks, in two tiers:
 - **Full tier**, on every pull request and every push to `main`: `bootstrap`, `lint`, `build`, `test`, `uitest` and `perf`.
 - **Light tier**, on a push to any other branch: `bootstrap`, `lint`, `build` and `test`. If the branch already has an open pull request that GitHub reports as mergeable at the pushed commit, the push runs only a short Linux job that finds it, because the pull-request run covers the commit. The light tier runs when the pull request has a merge conflict, because GitHub then starts no pull-request run, and whenever the lookup fails or gets no clear answer after a short wait.
 
-A change that touches only documents (`*.md`, `plans/`, `docs/`) starts no run. A push is judged by the commits pushed, but a pull request is judged by its whole diff, so a docs-only commit added to a pull request that also changes code still runs.
+A change that touches only documents (`*.md`, `plans/`, `docs/`) starts no macOS run. The **Documents** workflow checks it on Linux instead: the governance check, and the comparison of the retry numbers in this file with the tool. A push is judged by the commits pushed, but a pull request is judged by its whole diff, so a docs-only commit added to a pull request that also changes code still runs.
 
 A pull request needs a green **Build and test** check.
 
@@ -79,7 +79,7 @@ The repository is private, and GitHub counts a macOS minute ten times and rounds
 | Full: a pull request or a push to `main` | 4 min 47 s to 5 min 7 s | 50 to 60 |
 | Light: a push to a branch with no pull request | 2 min 3 s | 30, plus 1 for the lookup |
 | A push to a branch with a mergeable pull request | 5 s on Linux | 1 |
-| A docs-only change | no run | 0 |
+| A docs-only change | under 1 min on Linux | 1 |
 | macOS 15, weekly | 2 min 30 s | 30, about 130 a month |
 
 GitHub's published allowance for the free plan is 2,000 minutes a month, which is about 33 full runs at 60. Every run prints its duration and its billed minutes in its last step and in the run summary. The printed time starts at the job's first step, so the bill can be one minute, ten billed minutes, more than the printed figure.

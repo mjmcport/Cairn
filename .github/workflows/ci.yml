@@ -1,7 +1,8 @@
 name: CI
 
-# A change that touches only documents starts no run. A push is judged by the
-# commits pushed; a pull request is judged by its whole diff.
+# A change that touches only documents starts no run here; the Documents
+# workflow checks it on Linux, and must list every path ignored below. A push
+# is judged by the commits pushed; a pull request is judged by its whole diff.
 on:
   push:
     paths-ignore:

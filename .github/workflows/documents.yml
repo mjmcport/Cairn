@@ -1,0 +1,43 @@
+name: Documents
+
+# The CI workflow starts no run for a change that touches only documents, so
+# this one checks them on Linux, at a tenth of the macOS rate. The first three
+# paths must stay the same as the paths CI ignores; `make test` compares them
+# (scripts/check-workflow-paths.py).
+on:
+  push:
+    paths:
+      - "**.md"
+      - "plans/**"
+      - "docs/**"
+      - .github/workflows/documents.yml
+  pull_request:
+    paths:
+      - "**.md"
+      - "plans/**"
+      - "docs/**"
+      - .github/workflows/documents.yml
+
+concurrency:
+  group: documents-${{ github.ref }}${{ github.ref == 'refs/heads/main' && format('-{0}', github.run_id) || '' }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Document checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      # The statements the project depends on are still in the governance files.
+      - name: Governance files
+        run: scripts/check-governance.sh
+
+      # Includes the comparison of the retry window in CONTRIBUTING.md with
+      # the numbers in the tool.
+      - name: Accessibility retry tool
+        run: scripts/test-accessibility-retries.sh
