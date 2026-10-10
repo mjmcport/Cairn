@@ -72,19 +72,21 @@ A pull request needs a green **Build and test** check.
 
 ### What a run costs
 
-The repository is private, and GitHub counts a macOS minute ten times and rounds each job up to a whole minute. Measured on 2026-10-09:
+The repository is private, and GitHub counts a macOS minute ten times and rounds each job up to a whole minute. Measured on 2026-10-10, with 16 end-to-end tests:
 
 | Run | Job time | Billed minutes |
 | --- | --- | --- |
-| Full: a pull request or a push to `main` | 4 min 47 s to 5 min 7 s | 50 to 60 |
-| Light: a push to a branch with no pull request | 2 min 3 s | 30, plus 1 for the lookup |
+| Full: a pull request or a push to `main` | about 7 min 10 s to 7 min 25 s | 80 |
+| Light: a push to a branch with no pull request | about 2 min | 30, plus 1 for the lookup |
 | A push to a branch with a mergeable pull request | 5 s on Linux | 1 |
 | A docs-only change | under 1 min on Linux | 1 |
-| macOS 15, weekly | 2 min 30 s | 30, about 130 a month |
+| macOS 15, weekly or by hand | 4 min 40 s to 5 min 2 s | 50 to 60, about 216 to 260 a month |
 
-GitHub's published allowance for the free plan is 2,000 minutes a month, which is about 33 full runs at 60. Every run prints its duration and its billed minutes in its last step and in the run summary. The printed time starts at the job's first step, so the bill can be one minute, ten billed minutes, more than the printed figure.
+The full run grew from 50 to 60 billed minutes to 80 when the end-to-end suite went from 8 tests to 16; each test launches the app. The light figure was measured on 2026-10-09 and has not been measured again.
 
-The macOS 15 workflow's last step also prints its monthly figure and raises a warning when that passes about 300, which a run of just over 6 minutes does.
+GitHub's published allowance for the free plan is 2,000 minutes a month, which is about 25 full runs at 80. Every run prints its duration and its billed minutes in its last step and in the run summary. The printed time starts at the job's first step, so the bill can be one minute, ten billed minutes, more than the printed figure.
+
+The macOS 15 workflow's last step also prints its monthly figure and raises a warning when that passes about 300, which a run of just over 6 minutes does. It is now within about a minute of that mark, so the next few end-to-end tests will take it over; run it less often or trim what it runs before then.
 
 ## Conduct
 
