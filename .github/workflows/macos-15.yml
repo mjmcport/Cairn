@@ -59,6 +59,15 @@ jobs:
         id: uitest
         run: make uitest
 
+      # Shown only. These retries are not gated and do not count toward the
+      # macOS 26 window in ci.yml.
+      - name: Accessibility audit summary
+        if: ${{ !cancelled() && (steps.uitest.outcome == 'success' || steps.uitest.outcome == 'failure') }}
+        run: |
+          set -o pipefail
+          scripts/accessibility-retries.py summarize build/accessibility/audits.log \
+            | tee -a "$GITHUB_STEP_SUMMARY"
+
       - name: Upload test results
         if: failure()
         uses: actions/upload-artifact@v4

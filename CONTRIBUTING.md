@@ -25,6 +25,17 @@ Cairn is MIT licensed, and every line in it must be compatible with that.
 - Tests may read and write only temporary fixture folders. They must never touch Desktop, Documents or any other real user folder.
 - A flaky test gets an issue and is quarantined. Do not retry it silently.
 
+### The accessibility audit's one retry
+
+The system's accessibility audit sometimes times out without reporting an issue, so the audit test retries once. The retry is not silent: the test records every audit and every retry, and each full-suite CI run shows both counts in its summary.
+
+- The window is the 20 most recent full-suite runs, the current one included.
+- A run fails when it retried and the window then holds more than 3 retries. A run that did not retry passes whatever the count, and its summary carries a warning while the count is over.
+- A run whose UI tests recorded no audits fails, because the recording is broken. If the earlier records cannot be read, the run passes and its summary says the count is unknown.
+- When this check fails, open an issue and find out why the audit is timing out. Do not simply re-run.
+- The numbers are `WINDOW` and `THRESHOLD` in `scripts/accessibility-retries.py`. Change them there and in this section together; `scripts/test-accessibility-retries.sh` fails when the two disagree.
+- The weekly macOS 15 run shows its own counts. They are not gated and do not count toward the window.
+
 ## Commits
 
 - One commit per step of the plan, with code, tests and docs together.

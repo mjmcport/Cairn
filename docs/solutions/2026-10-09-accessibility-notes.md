@@ -21,6 +21,8 @@ tags: [accessibility, xcuitest, voiceover]
 
 `performAccessibilityAudit` failed with "Audit failed to complete in time" (code -56) once, and ran four times slower once, in roughly ten runs of the empty-folder screen. It was not reproducible in isolation (7 of 7 passes). The test announces the timeout as an XCTest activity and retries once. If CI shows a second timeout, quarantine the test and open an issue rather than adding retries.
 
+Since the Phase 0 follow-up the retry is counted. The test records every audit and every retry through `AuditLog` (TestSupport), `scripts/accessibility-retries.py` puts the counts in each full-suite run's summary, and a run fails when it retried and the last 20 full-suite runs then hold more than 3 retries. The rule and what to do when it fails are in `CONTRIBUTING.md`. The retry rate on the CI runner is not yet known, so the threshold is a starting value. No retry has been seen on CI yet, so the retry line has only been exercised by the unit tests.
+
 ## What to carry forward
 
 - Every new control: declare an `AccessibilityElement`, apply it, and add the screen to the audit tests if it is a new screen.

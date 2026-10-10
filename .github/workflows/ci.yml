@@ -64,6 +64,10 @@ jobs:
     if: ${{ !cancelled() && needs.pull-request-lookup.outputs.open != 'true' }}
     runs-on: macos-26
     timeout-minutes: 45
+    permissions:
+      contents: read
+      # To read the audit records earlier runs uploaded.
+      actions: read
     env:
       # The UI tests and the performance tests run only on pull requests and
       # on main. Other pushes stop after the unit tests.
@@ -93,6 +97,61 @@ jobs:
         id: uitest
         if: env.FULL_TIER == 'true'
         run: make uitest
+
+      # The audit may retry once after a timeout. Every audit and retry is
+      # counted here, whether the UI tests passed or failed. A run that
+      # recorded no audits fails: the recording is broken.
+      - name: Accessibility audit summary
+        id: audits
+        if: ${{ !cancelled() && (steps.uitest.outcome == 'success' || steps.uitest.outcome == 'failure') }}
+        run: |
+          set -o pipefail
+          scripts/accessibility-retries.py summarize build/accessibility/audits.log \
+            --run "$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" \
+            --output build/accessibility/record.json | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload the audit record
+        if: ${{ !cancelled() && steps.audits.outcome == 'success' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: accessibility-audits-${{ github.run_id }}-${{ github.run_attempt }}
+          path: build/accessibility/record.json
+          if-no-files-found: error
+          retention-days: 90
+
+      # Records come from any earlier full-suite run, on any branch. If the
+      # listing fails there is no history folder, and the window step says
+      # the count is unknown instead of failing.
+      - name: Download earlier audit records
+        if: ${{ !cancelled() && steps.audits.outcome == 'success' }}
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # More than the window needs: this run's own record may be listed,
+          # and the tool takes the newest ones.
+          gh api --method GET "repos/$GITHUB_REPOSITORY/actions/artifacts" -f per_page=100 \
+            --jq '[.artifacts[] | select(.expired | not) | select(.name | startswith("accessibility-audits-"))]
+                  | sort_by(.created_at) | reverse | .[:30][] | "\(.id) \(.name)"' \
+            > build/accessibility/artifacts.txt
+          mkdir -p build/accessibility/history
+          while read -r id name; do
+            # A record that cannot be fetched is left empty; the tool names it.
+            record="build/accessibility/history/$name.json"
+            gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$id/zip" > build/accessibility/artifact.zip \
+              && unzip -p build/accessibility/artifact.zip record.json > "$record" \
+              || : > "$record"
+          done < build/accessibility/artifacts.txt
+          echo "Listed $(wc -l < build/accessibility/artifacts.txt | tr -d ' ') earlier record(s)"
+
+      # Fails when this run retried and the last 20 full-suite runs then hold
+      # more than 3 retries. The numbers are in the script and CONTRIBUTING.md.
+      - name: Accessibility retry window
+        if: ${{ !cancelled() && steps.audits.outcome == 'success' }}
+        run: |
+          set -o pipefail
+          scripts/accessibility-retries.py check build/accessibility/record.json \
+            build/accessibility/history | tee -a "$GITHUB_STEP_SUMMARY"
 
       # Reported, not blocking: runner timings vary too much to gate on yet.
       - name: Performance tests
@@ -142,6 +201,7 @@ jobs:
           path: |
             build/DerivedData/Logs/Test
             build/performance
+            build/accessibility
           if-no-files-found: ignore
           retention-days: 7
 

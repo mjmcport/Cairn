@@ -43,12 +43,17 @@ final class AccessibilityTests: XCTestCase {
   ///   and the correct thing to say even though it is not a dictionary word.
   @MainActor
   private func audit(_ app: XCUIApplication, _ screen: String) throws {
+    // Every audit and every retry is recorded, so CI can show and gate the
+    // retry rate (CONTRIBUTING.md, "The accessibility audit's one retry").
+    let log = AuditLog()
+    log.recordAudit(screen: screen)
     do {
       try runAudit(app, screen)
     } catch let error as NSError where error.code == Self.auditTimedOut {
       // Seen about once in ten runs on the development Mac: the audit itself
       // times out without reporting an issue. One announced retry; a second
       // timeout fails the test. Tracked in docs/solutions (accessibility notes).
+      log.recordRetry(screen: screen)
       XCTContext.runActivity(named: "Accessibility audit timed out on \(screen); retrying once") {
         _ in
       }

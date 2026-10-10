@@ -10,6 +10,8 @@ export DEVELOPER_DIR
 PROJECT := Cairn.xcodeproj
 DERIVED_DATA := build/DerivedData
 PERFORMANCE := build/performance
+# Where the UI tests record each accessibility audit and retry.
+AUDIT_LOG := build/accessibility/audits.log
 DESTINATION := platform=macOS,arch=arm64
 SWIFT_SOURCES := App UITests Packages
 # Every folder under Packages that has a manifest, so a new package is tested
@@ -46,6 +48,7 @@ test: generate ## Run the script tests, the project-spec checks and every packag
 	scripts/test-pre-commit.sh
 	scripts/test-ci-select-xcode.sh
 	scripts/test-ci-duration.sh
+	scripts/test-accessibility-retries.sh
 	scripts/test-check-package.sh
 	@set -e; for package in $(PACKAGES); do \
 		echo "== $$package"; \
@@ -54,7 +57,10 @@ test: generate ## Run the script tests, the project-spec checks and every packag
 	done
 
 uitest: generate ## Run the end-to-end tests
-	$(XCODEBUILD) -scheme CairnUITests -skip-testing:CairnUITests/PerformanceTests test
+	@mkdir -p $(dir $(AUDIT_LOG)) && rm -f $(AUDIT_LOG)
+	@# xcodebuild hands a TEST_RUNNER_ variable to the test process without the prefix.
+	TEST_RUNNER_CAIRN_AUDIT_LOG="$(CURDIR)/$(AUDIT_LOG)" \
+		$(XCODEBUILD) -scheme CairnUITests -skip-testing:CairnUITests/PerformanceTests test
 
 perf: generate ## Run the performance tests and compare them with the committed baseline
 	@mkdir -p $(PERFORMANCE)
