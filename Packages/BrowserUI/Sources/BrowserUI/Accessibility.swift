@@ -4,9 +4,10 @@ import AppKit
 /// find it by, and the label VoiceOver speaks.
 ///
 /// Declare every element here, in ``all``, and apply it with
-/// `view.apply(_:)`. Setting an identifier or a label any other way is
-/// rejected by `scripts/check-accessibility.sh`, so a control cannot gain a
-/// test hook without also gaining a spoken name.
+/// `view.apply(_:)`, or build a toolbar button from it with
+/// `NSToolbarItem(_:symbolName:)`. Setting an identifier or a label any other
+/// way is rejected by `scripts/check-accessibility.sh`, so a control cannot
+/// gain a test hook without also gaining a spoken name.
 public struct AccessibilityElement: Sendable, Hashable {
   /// Stable, unique, never localized. UI tests query by this.
   public let identifier: String
@@ -34,11 +35,16 @@ extension AccessibilityElement {
     identifier: "size-text", label: "Size")
   public static let modifiedCell = AccessibilityElement(
     identifier: "modified-text", label: "Date Modified")
+  public static let backButton = AccessibilityElement(
+    identifier: "go-back", label: "Back")
+  public static let forwardButton = AccessibilityElement(
+    identifier: "go-forward", label: "Forward")
 
   /// Every element the app declares. Tests check that identifiers are unique
   /// and labels are present.
   public static let all: [AccessibilityElement] = [
     .mainWindow, .browserView, .fileList, .browserStatus, .nameCell, .sizeCell, .modifiedCell,
+    .backButton, .forwardButton,
   ]
 }
 
@@ -74,5 +80,32 @@ extension NSWindow {
   public func apply(_ element: AccessibilityElement) {
     identifier = NSUserInterfaceItemIdentifier(element.identifier)
     setAccessibilityIdentifier(element.identifier)
+  }
+}
+
+extension AccessibilityElement {
+  /// The identifier of the toolbar item that holds this element's button.
+  public var toolbarItemIdentifier: NSToolbarItem.Identifier {
+    NSToolbarItem.Identifier(identifier)
+  }
+}
+
+extension NSToolbarItem {
+  /// Creates a toolbar item that holds a real button, which takes its
+  /// identifier and spoken label from the element through `apply(_:)` like
+  /// any other control. A standard item is not used because the button the
+  /// system makes for one has no accessibility identifier (seen on macOS 27).
+  public convenience init(_ element: AccessibilityElement, symbolName: String) {
+    self.init(itemIdentifier: element.toolbarItemIdentifier)
+    label = element.label
+    paletteLabel = element.label
+
+    let button = ToolbarButton(title: element.label, target: nil, action: nil)
+    button.image = NSImage(systemSymbolName: symbolName, accessibilityDescription: element.label)
+    // Without the symbol the button falls back to showing its title.
+    button.imagePosition = button.image == nil ? .noImage : .imageOnly
+    button.bezelStyle = .toolbar
+    button.apply(element)
+    view = button
   }
 }

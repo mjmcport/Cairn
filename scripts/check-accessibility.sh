@@ -1,13 +1,15 @@
 #!/bin/sh
 # Enforces the accessibility convention (quality bar 9): identifiers and
-# labels are set only through AccessibilityElement and its apply helpers, so
-# no control gets a test hook without a declared, spoken identity.
+# labels are set only through AccessibilityElement and its helpers, so no
+# control gets a test hook without a declared, spoken identity. A toolbar
+# item's identifier is its button's identity, so toolbar items and their
+# identifiers are built only in the helper file too.
 #
 # Set CAIRN_ROOT to check a different tree (used by the script's own test).
 
 root="${CAIRN_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}"
 helper="Packages/BrowserUI/Sources/BrowserUI/Accessibility.swift"
-direct_calls='setAccessibilityIdentifier\(|setAccessibilityLabel\(|NSUserInterfaceItemIdentifier\("'
+direct_calls='setAccessibilityIdentifier\(|setAccessibilityLabel\(|NSUserInterfaceItemIdentifier\("|NSToolbarItem\.Identifier\(|\(itemIdentifier:'
 failures=0
 
 # Split the file list on newlines only, so a path with a space stays one file.

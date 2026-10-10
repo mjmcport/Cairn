@@ -98,6 +98,17 @@ expect $accessibility fail "accessibility: rejects a literal view identifier"
 make_ui_tree; echo '// never call setAccessibilityLabel( directly' >> "$ui_dir/View.swift"
 expect $accessibility pass "accessibility: ignores a comment"
 
+toolbar_literal='let item = NSToolbarItem(itemIdentifier: NSToolbarItem.Identifier("go-back"))'
+make_ui_tree; echo "$toolbar_literal" >> "$ui_dir/View.swift"
+expect $accessibility fail "accessibility: rejects a toolbar item built outside the helper file"
+
+make_ui_tree; echo 'static let back = NSToolbarItem.Identifier("go-back")' >> "$work/tree/App/AppDelegate.swift"
+expect $accessibility fail "accessibility: rejects a literal toolbar item identifier in the app"
+
+make_ui_tree; echo "$toolbar_literal" >> "$ui_dir/Accessibility.swift"
+echo 'let item = NSToolbarItem(.backButton, symbolName: "chevron.left")' >> "$ui_dir/View.swift"
+expect $accessibility pass "accessibility: allows a toolbar item built in the helper file"
+
 # A checkout under a folder whose name has a space is checked like any other.
 move_tree_under_a_space() {
     rm -rf "$work/My Projects"
@@ -119,6 +130,10 @@ move_tree_under_a_space
 expect $guard fail "space in path: guard rejects FileManager without a guard"
 expect $network fail "space in path: network rejects URLSession"
 expect $accessibility fail "space in path: accessibility rejects a direct label"
+
+make_ui_tree; echo "$toolbar_literal" >> "$ui_dir/View.swift"
+move_tree_under_a_space
+expect $accessibility fail "space in path: accessibility rejects a toolbar item built outside the helper file"
 root="$work/tree"
 
 exit "$failed"

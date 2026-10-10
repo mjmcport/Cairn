@@ -9,6 +9,7 @@ import FileSystemCore
 final class AppDelegate: NSObject, NSApplicationDelegate {
   private var window: NSWindow?
   private let diagnostics = DiagnosticsSubscriber()
+  private let toolbar = BrowserToolbar()
 
   static func main() {
     let application = NSApplication.shared
@@ -36,6 +37,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     window.contentViewController = BrowserViewController(location: location)
     window.setContentSize(NSSize(width: 900, height: 600))
     window.apply(.mainWindow)
+    window.toolbar = toolbar.makeToolbar()
+    window.toolbarStyle = .unified
     window.isReleasedWhenClosed = false
     window.center()
     window.makeKeyAndOrderFront(nil)

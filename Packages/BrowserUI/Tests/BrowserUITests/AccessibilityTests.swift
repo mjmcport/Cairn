@@ -38,6 +38,29 @@ import Testing
     #expect(window.accessibilityIdentifier() == "main-window")
   }
 
+  @Test func theToolbarButtonsAreDeclared() {
+    #expect(AccessibilityElement.all.contains(.backButton))
+    #expect(AccessibilityElement.all.contains(.forwardButton))
+  }
+
+  @Test func aToolbarItemHoldsAButtonThatTakesItsIdentityFromTheElement() throws {
+    let element = AccessibilityElement(identifier: "sample-button", label: "Sample")
+    #expect(element.toolbarItemIdentifier.rawValue == "sample-button")
+
+    let item = NSToolbarItem(element, symbolName: "chevron.left")
+    #expect(item.itemIdentifier == element.toolbarItemIdentifier)
+    #expect(item.label == "Sample")
+    #expect(item.paletteLabel == "Sample")
+
+    // The identity is on a real button, as AppKit reports it to VoiceOver and to tests.
+    let button = try #require(item.view as? NSButton)
+    #expect(button.accessibilityIdentifier() == "sample-button")
+    #expect(button.accessibilityLabel() == "Sample")
+    #expect(button.bezelStyle == .toolbar)
+    #expect(button.imagePosition == .imageOnly)
+    #expect(button.image?.accessibilityDescription == "Sample")
+  }
+
   @Test func theBrowserUsesDeclaredElementsForEveryControl() throws {
     let folder = URL(filePath: "/fixture/folder", directoryHint: .isDirectory)
     let controller = BrowserViewController(

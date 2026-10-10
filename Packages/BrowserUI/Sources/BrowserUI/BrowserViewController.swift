@@ -51,6 +51,9 @@ public final class BrowserViewController: NSViewController {
   private let statusLabel = NSTextField(wrappingLabelWithString: "")
   /// The model action in flight, if any. Tests await it.
   private(set) var loadTask: Task<Void, Never>?
+  /// True while the table's selection is being set from the model, so the
+  /// change is not written back as if the user had made it.
+  private var isApplyingModelSelection = false
 
   public var location: URL { model.location }
 
@@ -93,6 +96,10 @@ public final class BrowserViewController: NSViewController {
     statusLabel.alignment = .center
     // Primary label color: the secondary color fails the contrast audit.
     statusLabel.textColor = .labelColor
+    // An opaque background, so the text's contrast does not depend on the
+    // striped rows it sits over.
+    statusLabel.drawsBackground = true
+    statusLabel.backgroundColor = .textBackgroundColor
     statusLabel.isHidden = true
     statusLabel.translatesAutoresizingMaskIntoConstraints = false
 
@@ -121,6 +128,7 @@ public final class BrowserViewController: NSViewController {
     super.viewDidAppear()
     updateTitle()
     view.window?.makeFirstResponder(tableView)
+    validateToolbar()
   }
 
   // MARK: Actions
@@ -133,8 +141,21 @@ public final class BrowserViewController: NSViewController {
   /// Shows the folder that contains the current one. Sent by Go > Enclosing Folder.
   @objc public func goToEnclosingFolder(_ sender: Any?) {
     // At the root there is nowhere to go, so a load under way is left to finish.
-    guard model.enclosingFolder != nil else { return }
-    run { await $0.navigateToEnclosingFolder() }
+    guard model.moveToEnclosingFolder() else { return }
+    run { await $0.load() }
+  }
+
+  /// Returns to the previous folder. Sent by Go > Back and the toolbar.
+  @objc public func goBack(_ sender: Any?) {
+    // With no history there is nowhere to go, so a load under way is left to finish.
+    guard model.moveBack() else { return }
+    run { await $0.load() }
+  }
+
+  /// Undoes Back. Sent by Go > Forward and the toolbar.
+  @objc public func goForward(_ sender: Any?) {
+    guard model.moveForward() else { return }
+    run { await $0.load() }
   }
 
   @objc private func openClickedRow(_ sender: Any?) {
@@ -146,13 +167,19 @@ public final class BrowserViewController: NSViewController {
     let item = model.items[row]
     // Opening a file does nothing yet, so a load under way is left to finish.
     guard item.isNavigable else { return }
-    run { await $0.open(item) }
+    model.move(to: item.url)
+    run { await $0.load() }
   }
 
   /// Runs a model action that loads a folder, cancelling a load that is still
   /// under way. An action that would do nothing must not come through here:
   /// the cancelled load never publishes a result, so the browser would stay
   /// in its loading state.
+  ///
+  /// A command moves the model before it calls this, not inside the action.
+  /// The task starts later, and a second command can arrive first: it has to
+  /// see where the first one went, or it passes a check that is no longer
+  /// true, cancels the first, and then finds nothing to do.
   private func run(_ action: @escaping @MainActor (BrowserModel) async -> Void) {
     loadTask?.cancel()
     loadTask = Task { [model] in await action(model) }
@@ -163,7 +190,8 @@ public final class BrowserViewController: NSViewController {
   private func modelDidChange() {
     updateTitle()
     tableView.reloadData()
-    tableView.deselectAll(nil)
+    applyModelSelection()
+    validateToolbar()
 
     switch model.state {
     case .loading:
@@ -174,6 +202,27 @@ public final class BrowserViewController: NSViewController {
     case .failed(let message):
       statusLabel.stringValue = message
       statusLabel.isHidden = false
+    }
+  }
+
+  /// Brings the toolbar's buttons up to date. The system validates the toolbar
+  /// as the window handles events, and a load finishes without one.
+  private func validateToolbar() {
+    for item in view.window?.toolbar?.items ?? [] {
+      item.validate()
+    }
+  }
+
+  /// Selects the rows the model says are selected and scrolls the first into view.
+  private func applyModelSelection() {
+    isApplyingModelSelection = true
+    defer { isApplyingModelSelection = false }
+
+    let rows = IndexSet(
+      model.items.indices.filter { model.selection.contains(model.items[$0].url) })
+    tableView.selectRowIndexes(rows, byExtendingSelection: false)
+    if let first = rows.first {
+      tableView.scrollRowToVisible(first)
     }
   }
 
@@ -220,7 +269,30 @@ public final class BrowserViewController: NSViewController {
   }
 }
 
+extension BrowserViewController: NSUserInterfaceValidations {
+  /// Enables menu and toolbar items only when their action can do something.
+  public func validateUserInterfaceItem(_ item: any NSValidatedUserInterfaceItem) -> Bool {
+    switch item.action {
+    case #selector(goBack(_:)): model.canGoBack
+    case #selector(goForward(_:)): model.canGoForward
+    case #selector(goToEnclosingFolder(_:)): model.enclosingFolder != nil
+    case #selector(openSelection(_:)):
+      tableView.selectedRowIndexes.count == 1
+        && model.items.indices.contains(tableView.selectedRow)
+        && model.items[tableView.selectedRow].isNavigable
+    default: true
+    }
+  }
+}
+
 extension BrowserViewController: NSTableViewDataSource, NSTableViewDelegate {
+  public func tableViewSelectionDidChange(_ notification: Notification) {
+    guard !isApplyingModelSelection else { return }
+    model.selection = Set(
+      tableView.selectedRowIndexes.filter { model.items.indices.contains($0) }
+        .map { model.items[$0].url })
+  }
+
   public func numberOfRows(in tableView: NSTableView) -> Int {
     model.items.count
   }
