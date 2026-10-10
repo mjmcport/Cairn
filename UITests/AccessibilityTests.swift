@@ -138,4 +138,62 @@ final class AccessibilityTests: XCTestCase {
     XCTAssertTrue(table.staticTexts["alpha.txt"].waitForExistence(timeout: 10))
     XCTAssertEqual(window.title, tree.root.lastPathComponent)
   }
+
+  /// The tab bar, which exists only while there are two or more tabs.
+  @MainActor
+  private func tabBar(_ app: XCUIApplication) -> XCUIElement {
+    app.tabGroups[AccessibilityElement.tabBar.identifier]
+  }
+
+  @MainActor
+  func testAuditPassesWithTwoTabs() throws {
+    // Both tabs are titled "Sub": the audit reads a tab's title as its name.
+    let app = launch(on: tree.path("Sub"))
+    let table = app.tables[AccessibilityElement.fileList.identifier]
+    XCTAssertTrue(table.staticTexts["inner.txt"].waitForExistence(timeout: 10))
+
+    app.typeKey("t", modifierFlags: .command)
+    let bar = tabBar(app)
+    XCTAssertTrue(bar.waitForExistence(timeout: 10))
+    XCTAssertEqual(bar.label, AccessibilityElement.tabBar.label)
+    let tabs = bar.tabs.matching(identifier: AccessibilityElement.tab.identifier)
+    XCTAssertEqual(tabs.allElementsBoundByIndex.map(\.title), ["Sub", "Sub"])
+    XCTAssertEqual(tabs.allElementsBoundByIndex.map(\.isSelected), [false, true])
+    try audit(app, "Two tabs")
+  }
+
+  @MainActor
+  func testTabsCanBeOpenedSwitchedAndClosedWithTheKeyboardAlone() {
+    let app = launch(on: tree.root.path)
+    let table = app.tables[AccessibilityElement.fileList.identifier]
+    let window = app.windows[AccessibilityElement.mainWindow.identifier]
+    let bar = tabBar(app)
+    XCTAssertTrue(table.staticTexts["Sub"].waitForExistence(timeout: 10))
+
+    // A new tab takes keyboard focus in its list. Rows are alpha.txt, beta.txt, Empty, Sub.
+    app.typeKey("t", modifierFlags: .command)
+    XCTAssertTrue(bar.waitForExistence(timeout: 10))
+    XCTAssertTrue(table.staticTexts["Sub"].waitForExistence(timeout: 10))
+    for _ in 0..<4 {
+      app.typeKey(.downArrow, modifierFlags: [])
+    }
+    app.typeKey("o", modifierFlags: .command)
+    XCTAssertTrue(table.staticTexts["inner.txt"].waitForExistence(timeout: 10))
+    XCTAssertEqual(window.title, "Sub")
+
+    // Control-Tab shows tab 1 with focus in its list: Down Arrow selects its first row.
+    app.typeKey(.tab, modifierFlags: .control)
+    XCTAssertTrue(table.staticTexts["alpha.txt"].waitForExistence(timeout: 10))
+    app.typeKey(.downArrow, modifierFlags: [])
+    XCTAssertTrue(
+      table.tableRows.containing(.staticText, identifier: "alpha.txt").firstMatch.isSelected)
+
+    // Command-W closes tab 1. Tab 2 is left, where it was, and takes the keyboard.
+    app.typeKey("w", modifierFlags: .command)
+    XCTAssertTrue(table.staticTexts["inner.txt"].waitForExistence(timeout: 10))
+    XCTAssertFalse(bar.exists)
+    app.typeKey(.upArrow, modifierFlags: .command)
+    XCTAssertTrue(table.staticTexts["alpha.txt"].waitForExistence(timeout: 10))
+    XCTAssertEqual(window.title, tree.root.lastPathComponent)
+  }
 }

@@ -4,8 +4,8 @@ import AppKit
 /// find it by, and the label VoiceOver speaks.
 ///
 /// Declare every element here, in ``all``, and apply it with
-/// `view.apply(_:)`, or build a toolbar button from it with
-/// `NSToolbarItem(_:symbolName:)`. Setting an identifier or a label any other
+/// `view.apply(_:)` or `view.apply(_:for:)`, or build a toolbar button from
+/// it with `NSToolbarItem(_:symbolName:)`. Setting an identifier or a label any other
 /// way is rejected by `scripts/check-accessibility.sh`, so a control cannot
 /// gain a test hook without also gaining a spoken name.
 public struct AccessibilityElement: Sendable, Hashable {
@@ -39,12 +39,23 @@ extension AccessibilityElement {
     identifier: "go-back", label: "Back")
   public static let forwardButton = AccessibilityElement(
     identifier: "go-forward", label: "Forward")
+  public static let tabBar = AccessibilityElement(
+    identifier: "tab-bar", label: "Tabs")
+  /// Every tab shares this identifier, as list cells share theirs. A tab
+  /// speaks its folder's name, so the label is never spoken.
+  public static let tab = AccessibilityElement(
+    identifier: "tab", label: "Tab")
+  /// Every tab's close button. See `apply(_:for:)` for what it speaks.
+  public static let closeTabButton = AccessibilityElement(
+    identifier: "close-tab", label: "Close Tab")
+  public static let newTabButton = AccessibilityElement(
+    identifier: "new-tab", label: "New Tab")
 
   /// Every element the app declares. Tests check that identifiers are unique
   /// and labels are present.
   public static let all: [AccessibilityElement] = [
     .mainWindow, .browserView, .fileList, .browserStatus, .nameCell, .sizeCell, .modifiedCell,
-    .backButton, .forwardButton,
+    .backButton, .forwardButton, .tabBar, .tab, .closeTabButton, .newTabButton,
   ]
 }
 
@@ -66,6 +77,17 @@ extension NSView {
 }
 
 extension NSView {
+  /// Gives one of several like controls its identifier and a spoken label
+  /// that says which thing it acts on: the close button of the tab showing
+  /// Documents speaks "Close Tab Documents". Call it again when the thing's
+  /// name changes.
+  public func apply(_ element: AccessibilityElement, for subject: String) {
+    applyIdentifier(of: element)
+    setAccessibilityLabel("\(element.label) \(subject)")
+  }
+}
+
+extension NSView {
   /// Overrides what VoiceOver speaks for a view that shows changing text,
   /// for text that is not words, such as the dashes shown for a missing
   /// size. Pass `nil` to go back to speaking the visible text.
@@ -76,7 +98,7 @@ extension NSView {
 
 extension NSWindow {
   /// Gives the window its identifier. A window's spoken name is its title,
-  /// which the browser sets to the folder name.
+  /// which the pane sets to the showing tab's folder name.
   public func apply(_ element: AccessibilityElement) {
     identifier = NSUserInterfaceItemIdentifier(element.identifier)
     setAccessibilityIdentifier(element.identifier)

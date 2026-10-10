@@ -27,11 +27,32 @@ enum MainMenu {
     )
     mainMenu.addItem(submenuItem(titled: "Cairn", menu: appMenu))
 
+    // The tab commands have no target, like the Go commands: they travel the
+    // responder chain to the pane.
     let fileMenu = NSMenu()
+    fileMenu.addItem(
+      withTitle: "New Tab",
+      action: #selector(PaneViewController.newTab(_:)),
+      keyEquivalent: "t"
+    )
     fileMenu.addItem(
       withTitle: "Open",
       action: #selector(BrowserViewController.openSelection(_:)),
       keyEquivalent: "o"
+    )
+    fileMenu.addItem(.separator())
+    // The pane closes its showing tab, and the window with its last tab. With
+    // no pane in the chain the app delegate closes the key window.
+    fileMenu.addItem(
+      withTitle: "Close Tab",
+      action: #selector(PaneViewController.closeTab(_:)),
+      keyEquivalent: "w"
+    )
+    // An uppercase key equivalent means Shift is held.
+    fileMenu.addItem(
+      withTitle: "Close Window",
+      action: #selector(NSWindow.performClose(_:)),
+      keyEquivalent: "W"
     )
     mainMenu.addItem(submenuItem(titled: "File", menu: fileMenu))
 
@@ -60,15 +81,42 @@ enum MainMenu {
       action: #selector(NSWindow.performMiniaturize(_:)),
       keyEquivalent: "m"
     )
-    windowMenu.addItem(
-      withTitle: "Close",
-      action: #selector(NSWindow.performClose(_:)),
-      keyEquivalent: "w"
+    windowMenu.addItem(.separator())
+    // Shift turns Tab into the back-tab character, so that is the key. An
+    // item keyed as Tab with Control and Shift never fires, and takes plain
+    // Control-Tab from the item after it.
+    let previousTab = windowMenu.addItem(
+      withTitle: "Show Previous Tab",
+      action: #selector(PaneViewController.showPreviousTab(_:)),
+      keyEquivalent: "\u{19}"
     )
+    previousTab.keyEquivalentModifierMask = [.control, .shift]
+    windowMenu.addItem(
+      alternateShortcut(for: previousTab, keyEquivalent: "{", modifiers: [.command]))
+    let nextTab = windowMenu.addItem(
+      withTitle: "Show Next Tab",
+      action: #selector(PaneViewController.showNextTab(_:)),
+      keyEquivalent: "\t"
+    )
+    nextTab.keyEquivalentModifierMask = [.control]
+    windowMenu.addItem(alternateShortcut(for: nextTab, keyEquivalent: "}", modifiers: [.command]))
     mainMenu.addItem(submenuItem(titled: "Window", menu: windowMenu))
     NSApp.windowsMenu = windowMenu
 
     return mainMenu
+  }
+
+  /// A hidden item that gives a command a second shortcut. Command-Shift-[
+  /// and Command-Shift-] are keyed as the characters those keys type, `{`
+  /// and `}`, which leaves Command-[ and Command-] to Back and Forward.
+  private static func alternateShortcut(
+    for item: NSMenuItem, keyEquivalent: String, modifiers: NSEvent.ModifierFlags
+  ) -> NSMenuItem {
+    let alternate = NSMenuItem(title: item.title, action: item.action, keyEquivalent: keyEquivalent)
+    alternate.keyEquivalentModifierMask = modifiers
+    alternate.isHidden = true
+    alternate.allowsKeyEquivalentWhenHidden = true
+    return alternate
   }
 
   private static func submenuItem(titled title: String, menu: NSMenu) -> NSMenuItem {

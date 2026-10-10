@@ -2,8 +2,9 @@ import AppKit
 import BrowserUI
 import FileSystemCore
 
-/// The application entry point. Opens one window that lists a folder: the one
-/// named by `-OpenFolder <path>` at launch, or the home folder.
+/// The application entry point. Opens one window whose pane starts with one
+/// tab on a folder: the one named by `-OpenFolder <path>` at launch, or the
+/// home folder.
 @main
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
@@ -20,6 +21,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   }
 
   func applicationDidFinishLaunching(_ notification: Notification) {
+    // Tabs are drawn inside the pane. With the system's window tabbing left
+    // on, it would add tab commands of its own under the same shortcuts and
+    // could merge windows into tabs the pane knows nothing about.
+    NSWindow.allowsAutomaticWindowTabbing = false
     NSApp.mainMenu = MainMenu.make()
     diagnostics.start()
 
@@ -33,8 +38,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       defaults: .standard,
       fallback: FileManager.default.homeDirectoryForCurrentUser
     )
-    // The window takes its title from the browser, which shows the folder name.
-    window.contentViewController = BrowserViewController(location: location)
+    // The pane titles the window with the showing tab's folder name.
+    window.contentViewController = PaneViewController(location: location)
     window.setContentSize(NSSize(width: 900, height: 600))
     window.apply(.mainWindow)
     window.toolbar = toolbar.makeToolbar()
@@ -48,11 +53,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     Log.lifecycle.info("Launched")
   }
 
+  /// Command-W when no pane is in the responder chain, as with the About
+  /// panel in front and the main window closed: closes the key window. A pane
+  /// handles the command first.
+  @objc func closeTab(_ sender: Any?) {
+    NSApp.keyWindow?.performClose(sender)
+  }
+
   func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
     false
   }
 
   func applicationSupportsSecureRestorableState(_ app: NSApplication) -> Bool {
     true
+  }
+}
+
+extension AppDelegate: NSUserInterfaceValidations {
+  /// Close Tab needs a window to close.
+  func validateUserInterfaceItem(_ item: any NSValidatedUserInterfaceItem) -> Bool {
+    switch item.action {
+    case #selector(closeTab(_:)): NSApp.keyWindow != nil
+    default: true
+    }
   }
 }

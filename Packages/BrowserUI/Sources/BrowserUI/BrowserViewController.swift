@@ -2,7 +2,11 @@ import AppKit
 import FileSystemCore
 
 /// Shows the contents of one folder as a list with name, size and modified
-/// date. Every pane hosts one of these.
+/// date. Every tab of a pane is one of these.
+///
+/// A browser does not know whether it is the tab that is showing, so it
+/// leaves the window's title and keyboard focus to its owner: it keeps its
+/// own `title` current and reports a change through ``onTitleChange``.
 @MainActor
 public final class BrowserViewController: NSViewController {
   enum Column: String, CaseIterable {
@@ -57,9 +61,16 @@ public final class BrowserViewController: NSViewController {
 
   public var location: URL { model.location }
 
+  /// Called on the main actor when `title`, the name of the folder being
+  /// shown, changes. A command reports the change as it arrives, before the
+  /// folder has been listed.
+  public var onTitleChange: (() -> Void)?
+
   public init(location: URL, reader: any DirectoryReading = DirectoryReader()) {
     model = BrowserModel(location: location, reader: reader)
     super.init(nibName: nil, bundle: nil)
+    // Set here, so a tab that has never been shown already has its title.
+    title = Self.title(for: location)
   }
 
   @available(*, unavailable)
@@ -126,9 +137,7 @@ public final class BrowserViewController: NSViewController {
 
   public override func viewDidAppear() {
     super.viewDidAppear()
-    updateTitle()
-    view.window?.makeFirstResponder(tableView)
-    validateToolbar()
+    view.window?.validateToolbarItems()
   }
 
   // MARK: Actions
@@ -142,6 +151,7 @@ public final class BrowserViewController: NSViewController {
   @objc public func goToEnclosingFolder(_ sender: Any?) {
     // At the root there is nowhere to go, so a load under way is left to finish.
     guard model.moveToEnclosingFolder() else { return }
+    updateTitle()
     run { await $0.load() }
   }
 
@@ -149,12 +159,14 @@ public final class BrowserViewController: NSViewController {
   @objc public func goBack(_ sender: Any?) {
     // With no history there is nowhere to go, so a load under way is left to finish.
     guard model.moveBack() else { return }
+    updateTitle()
     run { await $0.load() }
   }
 
   /// Undoes Back. Sent by Go > Forward and the toolbar.
   @objc public func goForward(_ sender: Any?) {
     guard model.moveForward() else { return }
+    updateTitle()
     run { await $0.load() }
   }
 
@@ -168,7 +180,20 @@ public final class BrowserViewController: NSViewController {
     // Opening a file does nothing yet, so a load under way is left to finish.
     guard item.isNavigable else { return }
     model.move(to: item.url)
+    updateTitle()
     run { await $0.load() }
+  }
+
+  /// Puts keyboard focus in the file list. Does nothing while the browser's
+  /// view is not in a window.
+  public func focusList() {
+    view.window?.makeFirstResponder(tableView)
+  }
+
+  /// Stops a listing that is under way, for a browser that is going away.
+  /// The cancelled listing publishes nothing.
+  public func cancelLoad() {
+    loadTask?.cancel()
   }
 
   /// Runs a model action that loads a folder, cancelling a load that is still
@@ -191,7 +216,7 @@ public final class BrowserViewController: NSViewController {
     updateTitle()
     tableView.reloadData()
     applyModelSelection()
-    validateToolbar()
+    view.window?.validateToolbarItems()
 
     switch model.state {
     case .loading:
@@ -202,14 +227,6 @@ public final class BrowserViewController: NSViewController {
     case .failed(let message):
       statusLabel.stringValue = message
       statusLabel.isHidden = false
-    }
-  }
-
-  /// Brings the toolbar's buttons up to date. The system validates the toolbar
-  /// as the window handles events, and a load finishes without one.
-  private func validateToolbar() {
-    for item in view.window?.toolbar?.items ?? [] {
-      item.validate()
     }
   }
 
@@ -226,12 +243,15 @@ public final class BrowserViewController: NSViewController {
     }
   }
 
-  /// Names the controller and its window after the folder. The window is set
-  /// directly because it does not follow a title that changes after it opens.
+  /// Names the controller after the folder and tells the owner when the
+  /// name changed. A command calls this as it makes its move, so the owner
+  /// hears before the listing starts; a model change calls it for a move
+  /// made on the model directly.
   private func updateTitle() {
     let folderName = Self.title(for: model.location)
+    guard folderName != title else { return }
     title = folderName
-    view.window?.title = folderName
+    onTitleChange?()
   }
 
   static func title(for location: URL) -> String {

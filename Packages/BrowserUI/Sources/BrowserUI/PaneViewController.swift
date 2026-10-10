@@ -1,0 +1,257 @@
+import AppKit
+import FileSystemCore
+
+/// One pane of a window: a row of tabs over the browser of the tab that is
+/// showing. A window's content is one of these.
+///
+/// Each tab is a whole ``BrowserViewController``, kept alive while its tab is
+/// open, so a tab that is not showing keeps its folder, history, selection
+/// and scroll position, and finishes a listing it had started. Only the
+/// showing browser's view is in the window. A browser's view lists its folder
+/// when it loads, so a tab that has never been shown has listed nothing.
+///
+/// The pane owns what a browser cannot know about: the window's title,
+/// keyboard focus after the showing tab changes, and the tab bar. The Go
+/// commands still travel the responder chain to a browser; the pane offers
+/// the showing one when keyboard focus is on the tab bar.
+@MainActor
+public final class PaneViewController: NSViewController {
+  /// The tabs in the tab bar's order and the one showing. A tab is its browser.
+  private(set) var tabs: TabList<BrowserViewController>
+
+  let tabBar = TabBarView()
+  /// Holds the showing browser's view.
+  private let browserContainer = NSView()
+  /// The container's top edge, for when the tab bar is showing and when it is not.
+  private var topBelowTabBar: NSLayoutConstraint?
+  private var topAtPaneTop: NSLayoutConstraint?
+  /// Every tab lists through the same reader.
+  private let reader: any DirectoryReading
+
+  /// The browser of the tab that is showing.
+  public var showingBrowser: BrowserViewController { tabs.showing }
+
+  public init(location: URL, reader: any DirectoryReading = DirectoryReader()) {
+    self.reader = reader
+    let browser = BrowserViewController(location: location, reader: reader)
+    tabs = TabList(browser)
+    super.init(nibName: nil, bundle: nil)
+    adopt(browser)
+    title = browser.title
+  }
+
+  @available(*, unavailable)
+  public required init?(coder: NSCoder) {
+    fatalError("PaneViewController is created in code")
+  }
+
+  public override func loadView() {
+    let container = NSView(frame: NSRect(x: 0, y: 0, width: 900, height: 600))
+    tabBar.translatesAutoresizingMaskIntoConstraints = false
+    browserContainer.translatesAutoresizingMaskIntoConstraints = false
+    container.addSubview(tabBar)
+    container.addSubview(browserContainer)
+
+    topBelowTabBar = browserContainer.topAnchor.constraint(equalTo: tabBar.bottomAnchor)
+    topAtPaneTop = browserContainer.topAnchor.constraint(equalTo: container.topAnchor)
+    NSLayoutConstraint.activate([
+      tabBar.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+      tabBar.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+      tabBar.topAnchor.constraint(equalTo: container.topAnchor),
+      browserContainer.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+      browserContainer.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+      browserContainer.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+    ])
+    view = container
+  }
+
+  public override func viewDidLoad() {
+    super.viewDidLoad()
+    tabBar.onAction = { [weak self] in self?.handle($0) }
+    showTabs()
+  }
+
+  public override func viewDidAppear() {
+    super.viewDidAppear()
+    // The window does not follow a controller's title once it is on screen.
+    updateTitle()
+    showingBrowser.focusList()
+    view.window?.validateToolbarItems()
+  }
+
+  // MARK: Actions
+  //
+  // Each command changes the tab list as it arrives and brings the window in
+  // line before it returns, so a second command sent straight after sees
+  // where the first one left things. Only a browser's listing runs in a task.
+
+  /// Opens a tab at the end of the bar, on the folder the current tab is
+  /// showing, and shows it. Sent by File > New Tab and the bar's button.
+  @objc public func newTab(_ sender: Any?) {
+    // Read as the command arrives: the current tab has already made any move
+    // whose listing has yet to start.
+    let browser = BrowserViewController(location: showingBrowser.location, reader: reader)
+    adopt(browser)
+    tabs.add(browser)
+    tabsDidChange()
+  }
+
+  /// Closes the showing tab, and the window when it is the last tab. Sent by
+  /// File > Close Tab.
+  @objc public func closeTab(_ sender: Any?) {
+    // The command reaches the main window's pane even while another window,
+    // such as the About panel, is the key one: the application tries the main
+    // window's responders after the key window's. Command-W closes what is in
+    // front, so that window is closed and the tabs are left alone.
+    if let keyWindow = NSApplication.shared.keyWindow, keyWindow !== view.window {
+      keyWindow.performClose(sender)
+      return
+    }
+    close(showingBrowser)
+  }
+
+  /// Shows the tab to the right, wrapping around. Sent by Window > Show Next Tab.
+  @objc public func showNextTab(_ sender: Any?) {
+    guard tabs.showNext() else { return }
+    tabsDidChange()
+  }
+
+  /// Shows the tab to the left, wrapping around. Sent by Window > Show Previous Tab.
+  @objc public func showPreviousTab(_ sender: Any?) {
+    guard tabs.showPrevious() else { return }
+    tabsDidChange()
+  }
+
+  /// What a press in the tab bar asks for.
+  private func handle(_ action: TabBarView.Action) {
+    switch action {
+    case .show(let id):
+      guard let browser = id.base as? BrowserViewController, tabs.show(browser) else { return }
+      tabsDidChange()
+    case .close(let id):
+      guard let browser = id.base as? BrowserViewController else { return }
+      close(browser)
+    case .new:
+      newTab(nil)
+    }
+  }
+
+  private func close(_ browser: BrowserViewController) {
+    switch tabs.close(browser) {
+    case .unchanged:
+      return
+    case .lastTab:
+      // The tab stays; the window goes, and may refuse.
+      view.window?.performClose(nil)
+    case .closed:
+      browser.cancelLoad()
+      browser.onTitleChange = nil
+      if browser.isViewLoaded {
+        browser.view.removeFromSuperview()
+      }
+      browser.removeFromParent()
+      tabsDidChange()
+    }
+  }
+
+  // MARK: Drawing the tabs
+
+  /// Makes a browser a tab of this pane. Its view joins the window only
+  /// while its tab is showing.
+  private func adopt(_ browser: BrowserViewController) {
+    addChild(browser)
+    browser.onTitleChange = { [weak self, weak browser] in
+      guard let self, let browser else { return }
+      self.updateTabBar()
+      if browser === self.showingBrowser {
+        self.updateTitle()
+      }
+    }
+  }
+
+  /// What every command that changed the tab list ends with: the window is
+  /// brought in line, then keyboard focus, in that order, because focus goes
+  /// to a view that has to be in the window first.
+  private func tabsDidChange() {
+    showTabs()
+    restoreFocus()
+  }
+
+  /// Brings the window in line with the tab list: the showing browser's view,
+  /// the tab bar, the title and the toolbar.
+  private func showTabs() {
+    let browser = showingBrowser
+    if browser.view.superview !== browserContainer {
+      for subview in browserContainer.subviews {
+        subview.removeFromSuperview()
+      }
+      browser.view.translatesAutoresizingMaskIntoConstraints = false
+      browserContainer.addSubview(browser.view)
+      NSLayoutConstraint.activate([
+        browser.view.leadingAnchor.constraint(equalTo: browserContainer.leadingAnchor),
+        browser.view.trailingAnchor.constraint(equalTo: browserContainer.trailingAnchor),
+        browser.view.topAnchor.constraint(equalTo: browserContainer.topAnchor),
+        browser.view.bottomAnchor.constraint(equalTo: browserContainer.bottomAnchor),
+      ])
+    }
+    updateTabBar()
+    updateTitle()
+    view.window?.validateToolbarItems()
+  }
+
+  /// Redraws the tab bar, which is hidden while there is one tab.
+  private func updateTabBar() {
+    tabBar.update(
+      tabs: tabs.tabs.map { TabBarView.Tab(id: $0, title: $0.title ?? "") },
+      showing: showingBrowser)
+    let showsBar = tabs.tabs.count > 1
+    tabBar.isHidden = !showsBar
+    topAtPaneTop?.isActive = !showsBar
+    topBelowTabBar?.isActive = showsBar
+  }
+
+  /// Names the pane and its window after the showing tab's folder. The window
+  /// is set directly because it does not follow a title that changes after
+  /// it opens.
+  private func updateTitle() {
+    title = showingBrowser.title
+    view.window?.title = title ?? ""
+  }
+
+  /// Puts keyboard focus in the showing tab's file list after the tabs
+  /// changed, unless it is on a tab bar control that is still there. When the
+  /// view that had focus leaves the window, the window is left as its own
+  /// first responder, with focus on nothing.
+  private func restoreFocus() {
+    if !tabBar.isHidden, let focused = view.window?.firstResponder as? NSView,
+      focused.isDescendant(of: tabBar)
+    {
+      return
+    }
+    showingBrowser.focusList()
+  }
+
+  // MARK: The responder chain
+
+  /// Offers the showing browser for an action it handles. With keyboard focus
+  /// in the file list the chain passes the browser before it reaches the
+  /// pane. With focus on a control in the tab bar it reaches the pane without
+  /// passing a browser, and Back, Forward, Enclosing Folder and Open would
+  /// reach no one. A toolbar button that has focus asks the pane itself.
+  public override func supplementalTarget(forAction action: Selector, sender: Any?) -> Any? {
+    if showingBrowser.responds(to: action) {
+      return showingBrowser
+    }
+    return super.supplementalTarget(forAction: action, sender: sender)
+  }
+}
+
+extension PaneViewController: NSUserInterfaceValidations {
+  /// Enables the tab commands only when they can do something.
+  public func validateUserInterfaceItem(_ item: any NSValidatedUserInterfaceItem) -> Bool {
+    switch item.action {
+    case #selector(showNextTab(_:)), #selector(showPreviousTab(_:)): tabs.tabs.count > 1
+    default: true
+    }
+  }
+}

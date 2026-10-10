@@ -183,6 +183,46 @@ import Testing
     #expect(
       button.supplementalTarget(forAction: #selector(NSText.selectAll(_:)), sender: nil) == nil)
   }
+
+  @Test func aButtonWithKeyboardFocusOffersTheShowingTabsBrowser() async throws {
+    let folder = URL(filePath: "/fixture/folder", directoryHint: .isDirectory)
+    let pane = PaneViewController(location: folder, reader: StubReader(results: [folder: []]))
+    let window = NSWindow(contentViewController: pane)
+    let source = BrowserToolbar()
+    window.toolbar = source.makeToolbar()
+    let button = try #require(window.toolbar?.items.compactMap { $0.view as? NSButton }.first)
+    let first = pane.showingBrowser
+    pane.newTab(nil)
+    let second = pane.showingBrowser
+    try #require(second !== first)
+
+    // The pane handles no Go command itself; the button finds the browser it offers.
+    let back = #selector(BrowserViewController.goBack(_:))
+    #expect(button.supplementalTarget(forAction: back, sender: nil) as? NSResponder === second)
+    pane.showPreviousTab(nil)
+    #expect(button.supplementalTarget(forAction: back, sender: nil) as? NSResponder === first)
+    #expect(
+      button.supplementalTarget(forAction: #selector(NSText.selectAll(_:)), sender: nil) == nil)
+  }
+
+  /// What macOS 26 needs: there a button is not in the browser's window until
+  /// the toolbar has been laid out.
+  @Test func aButtonThatIsNotInTheWindowStillOffersTheShowingTabsBrowser() async throws {
+    let folder = URL(filePath: "/fixture/folder", directoryHint: .isDirectory)
+    let pane = PaneViewController(location: folder, reader: StubReader(results: [folder: []]))
+    let window = NSWindow(contentViewController: pane)
+    let source = BrowserToolbar()
+    window.toolbar = source.makeToolbar()
+    let button = try #require(window.toolbar?.items.compactMap { $0.view as? NSButton }.first)
+    button.removeFromSuperview()
+    try #require(button.window == nil)
+    #expect(ToolbarButtonItem.window(holding: button) === window)
+
+    let back = #selector(BrowserViewController.goBack(_:))
+    #expect(
+      button.supplementalTarget(forAction: back, sender: nil) as? NSResponder
+        === pane.showingBrowser)
+  }
 }
 
 /// A view that handles Back and says nothing about whether it can.

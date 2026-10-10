@@ -410,6 +410,118 @@ import Testing
     #expect(controller.model.selection.isEmpty)
   }
 
+  // MARK: A browser in a tab
+
+  /// A browser on `/fixture`, loaded, with its only row, the folder `child`,
+  /// selected. `gate` holds the listing of `child`.
+  private func browserAboutToOpenAFolder(holdingItAt gate: Gate? = nil) async throws -> (
+    controller: BrowserViewController, table: NSTableView
+  ) {
+    let parent = URL(filePath: "/fixture", directoryHint: .isDirectory)
+    let child = parent.appending(path: "child", directoryHint: .isDirectory)
+    let reader = StubReader(
+      results: [parent: [FileItem(url: child, kind: .directory)], child: []],
+      gates: gate.map { [child: $0] } ?? [:])
+    let controller = BrowserViewController(location: parent, reader: reader)
+    let table = try #require(Self.firstSubview(of: NSTableView.self, in: controller.view))
+    await controller.loadTask?.value
+    table.selectRowIndexes([0], byExtendingSelection: false)
+    return (controller, table)
+  }
+
+  @Test func openingAFolderReportsTheNewTitleAsTheCommandIsHandled() async throws {
+    let gate = Gate()
+    let (controller, _) = try await browserAboutToOpenAFolder(holdingItAt: gate)
+    #expect(controller.title == "fixture")
+    var reported: [String?] = []
+    controller.onTitleChange = { reported.append(controller.title) }
+
+    // Read straight after the command: the listing has not even started.
+    controller.openSelection(nil)
+    #expect(reported == ["child"])
+
+    await gate.open()
+    await controller.loadTask?.value
+    #expect(reported == ["child"])
+  }
+
+  @Test func aBrowserHasItsTitleBeforeItsViewIsLoaded() {
+    let controller = BrowserViewController(
+      location: URL(filePath: "/fixture/folder", directoryHint: .isDirectory),
+      reader: StubReader(results: [:]))
+    #expect(controller.title == "folder")
+    #expect(!controller.isViewLoaded)
+  }
+
+  @Test func backWithNoHistoryReportsNoTitleChange() async throws {
+    let (controller, _) = try await browserAboutToOpenAFolder()
+    var reports = 0
+    controller.onTitleChange = { reports += 1 }
+    controller.goBack(nil)
+    await controller.loadTask?.value
+    #expect(reports == 0)
+  }
+
+  /// A window whose content holds the browser's view beside another view.
+  private func window(holding controller: BrowserViewController) -> (
+    window: NSWindow, other: FocusableView
+  ) {
+    let content = NSViewController()
+    content.view = NSView(frame: NSRect(x: 0, y: 0, width: 600, height: 400))
+    let other = FocusableView(frame: NSRect(x: 0, y: 0, width: 10, height: 10))
+    content.view.addSubview(other)
+    content.addChild(controller)
+    content.view.addSubview(controller.view)
+    let window = NSWindow(contentViewController: content)
+    return (window, other)
+  }
+
+  @Test func aBrowserLeavesTheWindowsTitleAndKeyboardFocusAlone() async throws {
+    let (controller, _) = try await browserAboutToOpenAFolder()
+    let (window, other) = window(holding: controller)
+    window.title = "Someone else's title"
+    try #require(window.makeFirstResponder(other))
+
+    // What AppKit sends once the browser's view is on screen.
+    controller.viewDidAppear()
+    controller.openSelection(nil)
+    await controller.loadTask?.value
+    try #require(controller.model.state == .loaded && controller.title == "child")
+    #expect(window.title == "Someone else's title")
+    #expect(window.firstResponder === other)
+  }
+
+  @Test func askedToTakeFocusTheFileListBecomesFirstResponder() async throws {
+    let (controller, table) = try await browserAboutToOpenAFolder()
+    let (window, other) = window(holding: controller)
+    try #require(window.makeFirstResponder(other))
+
+    controller.focusList()
+    #expect(window.firstResponder === table)
+  }
+
+  @Test func cancellingTheLoadStopsAListingUnderWay() async throws {
+    let folder = URL(filePath: "/fixture/folder", directoryHint: .isDirectory)
+    let gate = Gate()
+    let reader = StubReader(
+      results: [folder: [FileItem(url: folder.appending(path: "a.txt"), kind: .file)]],
+      gates: [folder: gate])
+    let controller = BrowserViewController(location: folder, reader: reader)
+    _ = controller.view
+    await gate.waitUntilReached()
+    let held = try #require(controller.loadTask)
+
+    controller.cancelLoad()
+    // Required, not expected: a listing still running would publish below.
+    try #require(held.isCancelled)
+
+    // The listing arrives late and changes nothing.
+    await gate.open()
+    await held.value
+    #expect(controller.model.state == .loading)
+    #expect(controller.model.items.isEmpty)
+  }
+
   private static func firstSubview<View: NSView>(of type: View.Type, in view: NSView) -> View? {
     if let match = view as? View { return match }
     for subview in view.subviews {
@@ -420,4 +532,9 @@ import Testing
     }
     return nil
   }
+}
+
+/// A view that can hold keyboard focus, standing in for a control outside the browser.
+private final class FocusableView: NSView {
+  override var acceptsFirstResponder: Bool { true }
 }

@@ -43,6 +43,24 @@ import Testing
     #expect(AccessibilityElement.all.contains(.forwardButton))
   }
 
+  @Test func theTabBarsControlsAreDeclared() {
+    for element: AccessibilityElement in [.tabBar, .tab, .closeTabButton, .newTabButton] {
+      #expect(AccessibilityElement.all.contains(element))
+    }
+  }
+
+  @Test func applyingAnElementForASubjectNamesTheSubjectInTheLabel() {
+    let button = NSButton(title: "", target: nil, action: nil)
+    button.apply(.closeTabButton, for: "Documents")
+    #expect(button.identifier?.rawValue == "close-tab")
+    #expect(button.accessibilityIdentifier() == "close-tab")
+    #expect(button.accessibilityLabel() == "Close Tab Documents")
+
+    // Applied again when the subject's name changes.
+    button.apply(.closeTabButton, for: "Sub")
+    #expect(button.accessibilityLabel() == "Close Tab Sub")
+  }
+
   @Test func aToolbarItemHoldsAButtonThatTakesItsIdentityFromTheElement() throws {
     let element = AccessibilityElement(identifier: "sample-button", label: "Sample")
     #expect(element.toolbarItemIdentifier.rawValue == "sample-button")
@@ -81,6 +99,34 @@ import Testing
     #expect(found.contains("file-list"))
     #expect(found.contains("browser-status"))
     // AppKit gives some of its own subviews identifiers (prefixed with an underscore).
+    for identifier in found where !identifier.hasPrefix("_") {
+      #expect(
+        declared.contains(identifier), "\(identifier) is not declared in AccessibilityElement")
+    }
+  }
+
+  @Test func aPaneWithTwoTabsUsesDeclaredElementsForEveryControl() throws {
+    let folder = URL(filePath: "/fixture/folder", directoryHint: .isDirectory)
+    let pane = PaneViewController(location: folder, reader: StubReader(results: [folder: []]))
+    _ = pane.view
+    pane.newTab(nil)
+    let declared = Set(AccessibilityElement.all.map(\.identifier))
+
+    var found: [String] = []
+    func visit(_ view: NSView) {
+      let identifier = view.accessibilityIdentifier()
+      if !identifier.isEmpty { found.append(identifier) }
+      for subview in view.subviews { visit(subview) }
+    }
+    visit(pane.view)
+
+    // The bar's controls and the showing tab's browser, and nothing from the other tab.
+    for identifier in ["tab-bar", "new-tab", "browser-view", "file-list", "browser-status"] {
+      #expect(found.filter { $0 == identifier }.count == 1, "\(identifier)")
+    }
+    for identifier in ["tab", "close-tab"] {
+      #expect(found.filter { $0 == identifier }.count == 2, "\(identifier)")
+    }
     for identifier in found where !identifier.hasPrefix("_") {
       #expect(
         declared.contains(identifier), "\(identifier) is not declared in AccessibilityElement")
