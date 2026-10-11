@@ -14,6 +14,8 @@ on:
       - "**.md"
       - "plans/**"
       - "docs/**"
+  # Started by hand: `gh workflow run ci.yml --ref <branch>`.
+  workflow_dispatch:
 
 # A newer push to the same branch or pull request replaces the run in progress.
 # Not on main: there each run gets a group of its own, so a second push neither

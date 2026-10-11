@@ -72,7 +72,7 @@ A pull request needs a green **Build and test** check.
 
 ### What a run costs
 
-The repository is private, and GitHub counts a macOS minute ten times and rounds each job up to a whole minute. Measured on 2026-10-10, with 16 end-to-end tests:
+The repository is public, so GitHub does not bill its standard hosted runners. The billed figures below are what the same runs cost while the repository was private, when a macOS minute counted ten times and each job was rounded up to a whole minute. They still show which runs are heavy, and they apply again if the repository is ever made private. Measured on 2026-10-10, with 16 end-to-end tests:
 
 | Run | Job time | Billed minutes |
 | --- | --- | --- |
@@ -85,7 +85,7 @@ The repository is private, and GitHub counts a macOS minute ten times and rounds
 
 The full run grew from 50 to 60 billed minutes to 80 when the end-to-end suite went from 8 tests to 16; each test launches the app. The light figure was measured on 2026-10-09 and has not been measured again.
 
-GitHub's published allowance for the free plan is 2,000 minutes a month, which is about 25 full runs at 80. Every run prints its duration and its billed minutes in its last step and in the run summary. The printed time starts at the job's first step, so the bill can be one minute, ten billed minutes, more than the printed figure.
+For a private repository, GitHub's published allowance for the free plan is 2,000 minutes a month, which is about 25 full runs at 80. Every run prints its duration and its billed minutes in its last step and in the run summary. The printed time starts at the job's first step, so the bill can be one minute, ten billed minutes, more than the printed figure.
 
 The weekly macOS 15 run is trimmed to the unit tests and the accessibility end-to-end tests (`make uitest UITEST_SUITE=audits`), to keep it under about 300 billed minutes a month. Its last step prints its monthly figure and raises a warning when that passes about 300. Started by hand (`gh workflow run macos-15.yml --ref <branch>`), the workflow runs every end-to-end test.
 

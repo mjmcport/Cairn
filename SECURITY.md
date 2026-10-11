@@ -4,14 +4,13 @@ Cairn reads, moves and deletes your files, so security and data-loss bugs are tr
 
 ## Supported versions
 
-Cairn is in Phase 0 and has no released builds. Once releases begin, only the latest release receives security fixes.
+Cairn has no released builds yet. Once releases begin, only the latest release receives security fixes.
 
 ## Reporting a vulnerability
 
 Do not open a public issue for a security problem.
 
-- While the repository is private, contact the maintainer, [@mjmcport](https://github.com/mjmcport), directly through the contact details on that GitHub profile.
-- Once the repository is public, use GitHub's **Report a vulnerability** button under the Security tab.
+Use GitHub's **Report a vulnerability** button under the repository's Security tab. The report is private.
 
 Include the Cairn version or commit, your macOS version, the steps to reproduce, and what an attacker could do.
 

@@ -7,7 +7,7 @@ A native Mac file manager in Swift and AppKit. The full plan is the Claude Doc "
 | Decision | Value |
 | --- | --- |
 | Name | **Cairn** |
-| Repo | `mjmcport/Cairn`, **private**, personal account |
+| Repo | `mjmcport/Cairn`, **public** since 2026-10-11, personal account |
 | License | MIT, `Copyright (c) 2026 Matthew McGuire` |
 | Bundle ID | `com.mjmcport.cairn` (confirm before the first signed build) |
 | Minimum macOS | **15 Sequoia** |
@@ -92,6 +92,8 @@ Phase 0 is complete (12 steps, one commit each). Its plans are in `plans/` and i
 
 ## Open items
 
-- Branch protection on `main` is not enabled: GitHub's free plan refuses it on a private repository. Run `scripts/protect-main.sh` after upgrading to GitHub Pro or making the repository public.
+- The repository became public on 2026-10-11 as a fresh repository with the author's email replaced in every commit. Commit hashes, pull request numbers 1 to 11 and run numbers quoted in plans and notes written before that date refer to the old private repository, `mjmcport/Cairn-private-archive`, and do not resolve here.
+- Branch protection on `main` is on (`scripts/protect-main.sh`). The failing-pull-request test from the step 9 plan has not been repeated against it.
+- The hosted runners are free now that the repository is public. The weekly macOS 15 run is still trimmed, and the full end-to-end suite still runs only on pull requests and `main`; whether to widen either is undecided.
 - Confirm the bundle ID before the first signed build.
 - Apple Developer Program membership is needed by the end of Phase 1, not for Phase 0. Developer ID signing and notarization are Phase 1 exit requirements (`plans/phase-1a-browse.md`); until then the CI build is signed ad hoc and is not a release.
