@@ -38,7 +38,8 @@ Because the floor is 15, use the Observation framework and newer AppKit APIs fre
 2. **Work:** implement with unit tests, and end-to-end tests when the step touches the app.
 3. **Review:** run the review pass and fix the findings.
 4. **Compound:** record what was learned in `docs/solutions/`.
-5. **Commit:** one commit, message `Phase N step N: <name>`. Do not push here; see the next section.
+5. **Teach:** write the step's page in `docs/curriculum/` and add it to the index there. It is for junior developers and readers who are not software engineers: what changed, the decisions and why, and the lesson in each, in plain words. `docs/curriculum/README.md` lists what a page contains.
+6. **Commit:** one commit, message `Phase N step N: <name>`, with the curriculum page in it. Do not push here; see the next section.
 
 Read `docs/solutions/` before planning a step.
 
@@ -63,6 +64,7 @@ UITests/              XCUITest end-to-end suite
 project.yml           XcodeGen spec
 .github/workflows/    CI, and the weekly macOS 15 check
 docs/adr/             architecture decision records
+docs/curriculum/      one teaching page per step, for newcomers
 docs/performance/     committed performance baseline
 docs/solutions/       lessons captured after each step
 plans/                one plan per step
