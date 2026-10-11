@@ -38,7 +38,7 @@ Because the floor is 15, use the Observation framework and newer AppKit APIs fre
 2. **Work:** implement with unit tests, and end-to-end tests when the step touches the app.
 3. **Review:** run the review pass and fix the findings.
 4. **Compound:** record what was learned in `docs/solutions/`.
-5. **Teach:** write the step's page in `docs/curriculum/` and add it to the index there. It is for junior developers and readers who are not software engineers: what changed, the decisions and why, and the lesson in each, in plain words. `docs/curriculum/README.md` lists what a page contains.
+5. **Teach:** write the step's page in `docs/curriculum/` and add it to the index there. It is for junior developers and readers who are not software engineers: what changed, the decisions and why, and the lesson in each, in plain words. Write it as a good science writer would for a curious reader with no background: open with something from ordinary life and build the idea from it, with every fact taken from the plan, the notes or the measurements. `docs/curriculum/README.md` describes the voice and the shape of a page.
 6. **Commit:** one commit, message `Phase N step N: <name>`, with the curriculum page in it. Do not push here; see the next section.
 
 Read `docs/solutions/` before planning a step.
