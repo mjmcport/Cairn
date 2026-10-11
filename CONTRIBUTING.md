@@ -61,10 +61,7 @@ The system's accessibility audit sometimes times out without reporting an issue,
 3. Run `make test` and `make uitest`.
 4. Fill in the pull-request template.
 
-CI runs the same `make` tasks, in two tiers:
-
-- **Full tier**, on every pull request and every push to `main`: `bootstrap`, `lint`, `build`, `test`, `uitest` and `perf`.
-- **Light tier**, on a push to any other branch: `bootstrap`, `lint`, `build` and `test`. If the branch already has an open pull request that GitHub reports as mergeable at the pushed commit, the push runs only a short Linux job that finds it, because the pull-request run covers the commit. The light tier runs when the pull request has a merge conflict, because GitHub then starts no pull-request run, and whenever the lookup fails or gets no clear answer after a short wait.
+CI runs the same `make` tasks on every pull request and every push: `bootstrap`, `lint`, `build`, `test`, `uitest` and `perf`. If a pushed branch already has an open pull request that GitHub reports as mergeable at the pushed commit, the push runs only a short Linux job that finds it, because the pull-request run covers the commit. The push is built in full when the pull request has a merge conflict, because GitHub then starts no pull-request run, and whenever the lookup fails or gets no clear answer after a short wait.
 
 A change that touches only documents (`*.md`, `plans/`, `docs/`) starts no macOS run. The **Documents** workflow checks it on Linux instead: the governance check, and the comparison of the retry numbers in this file with the tool. A push is judged by the commits pushed, but a pull request is judged by its whole diff, so a docs-only commit added to a pull request that also changes code still runs.
 
@@ -76,18 +73,17 @@ The repository is public, so GitHub does not bill its standard hosted runners. T
 
 | Run | Job time | Billed minutes |
 | --- | --- | --- |
-| Full: a pull request or a push to `main` | about 7 min 10 s to 7 min 25 s | 80 |
-| Light: a push to a branch with no pull request | about 2 min | 30, plus 1 for the lookup |
+| A pull request, or a push with no pull request | about 7 min 10 s to 7 min 25 s | 80 |
 | A push to a branch with a mergeable pull request | 5 s on Linux | 1 |
 | A docs-only change | under 1 min on Linux | 1 |
 | macOS 15 by hand, every end-to-end test | 4 min 40 s to 5 min 2 s | 50 to 60 |
 | macOS 15 weekly, unit tests and the accessibility end-to-end tests | 2 min 38 s | 30, about 130 a month |
 
-The full run grew from 50 to 60 billed minutes to 80 when the end-to-end suite went from 8 tests to 16; each test launches the app. The light figure was measured on 2026-10-09 and has not been measured again.
+The full run grew from 50 to 60 billed minutes to 80 when the end-to-end suite went from 8 tests to 16; each test launches the app.
 
 For a private repository, GitHub's published allowance for the free plan is 2,000 minutes a month, which is about 25 full runs at 80. Every run prints its duration and its billed minutes in its last step and in the run summary. The printed time starts at the job's first step, so the bill can be one minute, ten billed minutes, more than the printed figure.
 
-The weekly macOS 15 run is trimmed to the unit tests and the accessibility end-to-end tests (`make uitest UITEST_SUITE=audits`), to keep it under about 300 billed minutes a month. Its last step prints its monthly figure and raises a warning when that passes about 300. Started by hand (`gh workflow run macos-15.yml --ref <branch>`), the workflow runs every end-to-end test.
+The weekly macOS 15 run builds and runs the unit tests and every end-to-end test. Its last step prints what a month of it would be billed on a private repository and raises a warning when that passes about 300 minutes. While the repository was private the weekly run was trimmed to the accessibility end-to-end tests to stay under that figure; `gh workflow run macos-15.yml -f suite=audits` still starts the trimmed run.
 
 ## Conduct
 

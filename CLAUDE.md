@@ -48,7 +48,7 @@ Read `docs/solutions/` before planning a step.
 - Never start a new step or push on top of a red CI run. After each push, wait for CI with `gh run watch` and fix a red run before continuing.
 - Commit after every step. Push at milestones, not after every commit.
 - Starting in Phase 1, work on a branch and open a pull request. Merge only when CI is green, so `main` stays green.
-- A weekly workflow, `.github/workflows/macos-15.yml`, builds the app and runs the unit tests and the accessibility end-to-end tests on a macOS 15 runner. Before merging a step that leans on AppKit behaviour, run every end-to-end test there by hand: `gh workflow run macos-15.yml --ref <branch>`. Treat a red weekly run like red CI: fix it before starting a new step. If it is unstable or its cost passes about 300 billed minutes a month, tell the user; do not drop a test to fix either.
+- A weekly workflow, `.github/workflows/macos-15.yml`, builds the app and runs the unit tests and every end-to-end test on a macOS 15 runner. Before merging a step that leans on AppKit behaviour, run it on the branch by hand: `gh workflow run macos-15.yml --ref <branch>`. Treat a red weekly run like red CI: fix it before starting a new step. If it is unstable, tell the user; do not drop a test to fix it.
 
 ## Repository layout
 
@@ -94,6 +94,6 @@ Phase 0 is complete (12 steps, one commit each). Its plans are in `plans/` and i
 
 - The repository became public on 2026-10-11 as a fresh repository with the author's email replaced in every commit. Commit hashes, pull request numbers 1 to 11 and run numbers quoted in plans and notes written before that date refer to the old private repository, `mjmcport/Cairn-private-archive`, and do not resolve here.
 - Branch protection on `main` is on (`scripts/protect-main.sh`). The failing-pull-request test from the step 9 plan has not been repeated against it.
-- The hosted runners are free now that the repository is public. The weekly macOS 15 run is still trimmed, and the full end-to-end suite still runs only on pull requests and `main`; whether to widen either is undecided.
+- The hosted runners are free now that the repository is public, so every push runs the full end-to-end suite and the weekly macOS 15 run is back to every end-to-end test (2026-10-11). If the repository is made private again, restore the light tier and the trimmed weekly run first; `CONTRIBUTING.md` has what they cost.
 - Confirm the bundle ID before the first signed build.
 - Apple Developer Program membership is needed by the end of Phase 1, not for Phase 0. Developer ID signing and notarization are Phase 1 exit requirements (`plans/phase-1a-browse.md`); until then the CI build is signed ad hoc and is not a release.

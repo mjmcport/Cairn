@@ -67,10 +67,6 @@ jobs:
       contents: read
       # To read the audit records earlier runs uploaded.
       actions: read
-    env:
-      # The UI tests and the performance tests run only on pull requests and
-      # on main. Other pushes stop after the unit tests.
-      FULL_TIER: ${{ github.event_name == 'pull_request' || github.ref == 'refs/heads/main' }}
     steps:
       - name: Record the start time
         run: echo "CI_STARTED=$(date +%s)" >> "$GITHUB_ENV"
@@ -94,7 +90,6 @@ jobs:
 
       - name: UI tests
         id: uitest
-        if: env.FULL_TIER == 'true'
         run: make uitest
 
       # The audit may retry once after a timeout. Every audit and retry is
@@ -140,7 +135,6 @@ jobs:
       # Reported, not blocking: runner timings vary too much to gate on yet.
       - name: Performance tests
         id: performance
-        if: env.FULL_TIER == 'true'
         continue-on-error: true
         run: |
           mkdir -p build/performance
