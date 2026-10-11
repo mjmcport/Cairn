@@ -85,7 +85,7 @@ uitest: generate ## Run the end-to-end tests
 	scripts/accessibility-retries.py extract $(UITEST_OUTPUT) --output $(AUDIT_LOG); \
 	exit $$status
 
-perf: generate ## Run the performance tests and compare them with the committed baseline
+perf: generate ## Run the performance tests, compare them with the committed baseline and judge the targets
 	@mkdir -p $(PERFORMANCE)
 	@echo "Running the listing performance tests (release build)..."
 	@xcrun swift test -c release --package-path Packages/FileSystemCore \
@@ -97,7 +97,8 @@ perf: generate ## Run the performance tests and compare them with the committed 
 		> $(PERFORMANCE)/ui.log 2>&1 || { tail -30 $(PERFORMANCE)/ui.log; exit 1; }
 	@scripts/performance.py parse $(PERFORMANCE)/unit.log $(PERFORMANCE)/ui.log \
 		--output $(PERFORMANCE)/latest.json
-	@scripts/performance.py compare docs/performance/baseline.json $(PERFORMANCE)/latest.json
+	@scripts/performance.py compare docs/performance/baseline.json $(PERFORMANCE)/latest.json \
+		--targets docs/performance/targets.json
 
 perf-baseline: ## Record this Mac's measurements as the new committed baseline
 	@rm -f $(PERFORMANCE)/latest.json

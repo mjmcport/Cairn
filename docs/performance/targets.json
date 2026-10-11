@@ -1,0 +1,11 @@
+{
+  "targets": [
+    {
+      "test": "PerformanceTests.testTimeToFirstRows10000",
+      "metric": "Duration (FirstRows)",
+      "unit": "s",
+      "maximum": 0.2,
+      "source": "quality bar 4"
+    }
+  ]
+}

@@ -81,7 +81,7 @@ The repository is private, and GitHub counts a macOS minute ten times and rounds
 | A push to a branch with a mergeable pull request | 5 s on Linux | 1 |
 | A docs-only change | under 1 min on Linux | 1 |
 | macOS 15 by hand, every end-to-end test | 4 min 40 s to 5 min 2 s | 50 to 60 |
-| macOS 15 weekly, unit tests and the accessibility end-to-end tests | not yet measured | not yet measured |
+| macOS 15 weekly, unit tests and the accessibility end-to-end tests | 2 min 38 s | 30, about 130 a month |
 
 The full run grew from 50 to 60 billed minutes to 80 when the end-to-end suite went from 8 tests to 16; each test launches the app. The light figure was measured on 2026-10-09 and has not been measured again.
 

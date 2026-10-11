@@ -1,5 +1,5 @@
 {
-  "recorded": "2026-10-09T19:46:25Z",
+  "recorded": "2026-10-11T15:19:04Z",
   "machine": {
     "model": "Mac16,13",
     "chip": "Apple M4",
@@ -11,92 +11,92 @@
     "ListingPerformanceTests.testDetailMetadata10000": {
       "metric": "Clock Monotonic Time",
       "unit": "s",
-      "average": 0.428,
-      "relativeStandardDeviationPercent": 7.167,
+      "average": 0.368,
+      "relativeStandardDeviationPercent": 1.198,
       "values": [
-        0.46099,
-        0.451262,
-        0.39905,
-        0.383284,
-        0.443133
+        0.374379,
+        0.370748,
+        0.363026,
+        0.365934,
+        0.363436
       ]
     },
     "ListingPerformanceTests.testDetailMetadata100000": {
       "metric": "Clock Monotonic Time",
       "unit": "s",
-      "average": 5.405,
-      "relativeStandardDeviationPercent": 7.112,
+      "average": 4.458,
+      "relativeStandardDeviationPercent": 4.879,
       "values": [
-        5.069238,
-        5.579291,
-        6.039079,
-        5.368458,
-        4.96667
+        4.364235,
+        4.333859,
+        4.338244,
+        4.36108,
+        4.892332
       ]
     },
     "ListingPerformanceTests.testList10000": {
       "metric": "Clock Monotonic Time",
       "unit": "s",
       "average": 0.054,
-      "relativeStandardDeviationPercent": 2.795,
+      "relativeStandardDeviationPercent": 1.032,
       "values": [
-        0.056135,
-        0.055242,
-        0.052346,
-        0.053225,
-        0.052602
+        0.053084,
+        0.054422,
+        0.053935,
+        0.05336,
+        0.054468
       ]
     },
     "ListingPerformanceTests.testList100000": {
       "metric": "Clock Monotonic Time",
       "unit": "s",
-      "average": 0.502,
-      "relativeStandardDeviationPercent": 0.498,
+      "average": 0.594,
+      "relativeStandardDeviationPercent": 15.479,
       "values": [
-        0.502273,
-        0.497594,
-        0.503133,
-        0.503067,
-        0.505094
+        0.525594,
+        0.536719,
+        0.513593,
+        0.754163,
+        0.641177
       ]
     },
     "ListingPerformanceTests.testSortByName10000": {
       "metric": "Clock Monotonic Time",
       "unit": "s",
-      "average": 0.144,
-      "relativeStandardDeviationPercent": 0.627,
+      "average": 0.026,
+      "relativeStandardDeviationPercent": 1.67,
       "values": [
-        0.144699,
-        0.144939,
-        0.143812,
-        0.142662,
-        0.142986
+        0.026157,
+        0.025707,
+        0.026887,
+        0.026376,
+        0.025742
       ]
     },
     "ListingPerformanceTests.testSortByName100000": {
       "metric": "Clock Monotonic Time",
       "unit": "s",
-      "average": 1.985,
-      "relativeStandardDeviationPercent": 1.874,
+      "average": 0.348,
+      "relativeStandardDeviationPercent": 2.495,
       "values": [
-        2.033344,
-        2.00835,
-        1.928876,
-        1.998091,
-        1.95824
+        0.360636,
+        0.355462,
+        0.337224,
+        0.341491,
+        0.34606
       ]
     },
     "PerformanceTests.testTimeToFirstRows10000": {
-      "metric": "Duration (LoadFolder)",
+      "metric": "Duration (FirstRows)",
       "unit": "s",
-      "average": 0.266,
-      "relativeStandardDeviationPercent": 1.438,
+      "average": 0.026,
+      "relativeStandardDeviationPercent": 14.374,
       "values": [
-        0.267389,
-        0.261932,
-        0.269199,
-        0.260159,
-        0.269303
+        0.027387,
+        0.022717,
+        0.029195,
+        0.02135,
+        0.031309
       ]
     }
   }

@@ -400,4 +400,386 @@ import Testing
     #expect(changes == 0)
     #expect(model.location.path == tree.root.path)
   }
+
+  // MARK: First rows
+
+  private let big = URL(filePath: "/fixture/big", directoryHint: .isDirectory)
+  private let other = URL(filePath: "/fixture/other", directoryHint: .isDirectory)
+
+  private func item(_ name: String, in folder: URL) -> FileItem {
+    FileItem(url: folder.appending(path: name), kind: .file, isHidden: name.hasPrefix("."))
+  }
+
+  /// A listing of `big` that hands over `first` and is then held at `gate`
+  /// before it hands over `all`. `other` holds one file and is not held.
+  private func reader(first: [String], all: [String], heldAt gate: Gate) -> StubReader {
+    StubReader(
+      results: [big: all.map { item($0, in: big) }, other: [item("elsewhere.txt", in: other)]],
+      firstItems: [big: first.map { item($0, in: big) }],
+      gatesAfterFirstItems: [big: gate])
+  }
+
+  /// A filter-and-sort that holds its first call at `gate`. It returns a
+  /// result even in a cancelled task, so the model has to notice by itself.
+  private func arrangeHeldOnce(at gate: Gate) -> BrowserModel.Arrange {
+    let calls = Counter()
+    return { items, sort, includingHidden in
+      if calls.next() == 0 {
+        await gate.pass()
+      }
+      return sort.sorted(items.visible(includingHidden: includingHidden))
+    }
+  }
+
+  /// A model that was in `big` with `x.txt` selected and has moved on to
+  /// `other`, so going back owes `big` that selection.
+  private func modelThatLeftBigWithXSelected(reader: StubReader) async -> BrowserModel {
+    let model = BrowserModel(location: big, reader: reader)
+    model.selection = [big.appending(path: "x.txt")]
+    await model.navigate(to: other)
+    return model
+  }
+
+  @Test func firstRowsAreShownUnsortedAndThenTheListSettles() async throws {
+    let gate = Gate()
+    let model = BrowserModel(
+      location: big,
+      reader: reader(first: ["c", "a"], all: ["c", "a", "b", ".hidden"], heldAt: gate))
+    var states: [BrowserModel.State] = []
+    model.onChange = { states.append(model.state) }
+
+    let load = Task { await model.load() }
+    await gate.waitUntilReached()
+    #expect(model.items.map(\.name) == ["c", "a"])
+    #expect(model.state == .loading)
+
+    await gate.open()
+    await load.value
+    #expect(model.items.map(\.name) == ["a", "b", "c"])
+    #expect(model.state == .loaded)
+    #expect(states == [.loading, .loading, .loaded])
+  }
+
+  @Test func aFolderOnDiskLargerThanOneBatchIsPublishedTwiceAndSettlesSorted() async throws {
+    // The real reader, whose first batch is 2,000 items.
+    let tree = try FixtureTree.build {
+      FixtureNode.directory("Before")
+      for index in 0..<2_001 {
+        FixtureNode.file(FixtureNames.numbered(index))
+      }
+    }
+    defer { try? tree.remove() }
+    let model = BrowserModel(location: tree.root)
+    var published: [String] = []
+    model.onChange = { published.append("\(model.state) \(model.items.count)") }
+
+    await model.load()
+    #expect(published == ["loading 0", "loading 2000", "loaded 2002"])
+    #expect(model.items.prefix(2).map(\.name) == ["Before", "file-000000.txt"])
+    #expect(model.items.last?.name == "file-002000.txt")
+  }
+
+  @Test func firstItemsThatAreAllHiddenPublishNothingUntilTheListSettles() async throws {
+    let gate = Gate()
+    let model = BrowserModel(
+      location: big, reader: reader(first: [".a", ".b"], all: [".a", ".b", "c"], heldAt: gate))
+    var states: [BrowserModel.State] = []
+    model.onChange = { states.append(model.state) }
+
+    let load = Task { await model.load() }
+    await gate.waitUntilReached()
+    #expect(model.items.isEmpty)
+    #expect(states == [.loading])
+
+    await gate.open()
+    await load.value
+    #expect(model.items.map(\.name) == ["c"])
+    #expect(states == [.loading, .loaded])
+  }
+
+  @Test func hiddenFirstItemsAreShownWhenHiddenFilesAre() async throws {
+    let gate = Gate()
+    let model = BrowserModel(
+      location: big, reader: reader(first: [".b", ".a"], all: [".b", ".a", "c"], heldAt: gate))
+    model.showsHiddenFiles = true
+    var states: [BrowserModel.State] = []
+    model.onChange = { states.append(model.state) }
+
+    let load = Task { await model.load() }
+    await gate.waitUntilReached()
+    #expect(model.items.map(\.name) == [".b", ".a"])
+    #expect(states == [.loading, .loading])
+
+    await gate.open()
+    await load.value
+    #expect(model.items.map(\.name) == [".a", ".b", "c"])
+  }
+
+  @Test func aRememberedSelectionIsRestoredOnceWhenTheListSettles() async throws {
+    let gate = Gate()
+    let model = await modelThatLeftBigWithXSelected(
+      reader: reader(first: ["c", "x.txt"], all: ["c", "x.txt", "a"], heldAt: gate))
+    var selections: [[String]] = []
+    model.onChange = { selections.append(selectedNames(model)) }
+
+    let back = Task { await model.goBack() }
+    await gate.waitUntilReached()
+    // x is among the first rows and is still not selected.
+    #expect(model.items.map(\.name) == ["c", "x.txt"])
+    #expect(model.selection.isEmpty)
+
+    await gate.open()
+    await back.value
+    #expect(selectedNames(model) == ["x.txt"])
+    #expect(selections == [[], [], ["x.txt"]])
+  }
+
+  @Test func aSelectionMadeInTheFirstRowsReplacesTheRememberedOne() async throws {
+    let gate = Gate()
+    let model = await modelThatLeftBigWithXSelected(
+      reader: reader(first: ["c", "x.txt"], all: ["c", "x.txt", "a"], heldAt: gate))
+
+    let back = Task { await model.goBack() }
+    await gate.waitUntilReached()
+    model.selection = [try #require(model.items.first { $0.name == "c" }).url]
+
+    await gate.open()
+    await back.value
+    #expect(model.items.map(\.name) == ["a", "c", "x.txt"])
+    #expect(selectedNames(model) == ["c"])
+  }
+
+  @Test func aRememberedSelectionSurvivesLeavingWhileTheFirstRowsAreShowing() async throws {
+    let gate = Gate()
+    let model = await modelThatLeftBigWithXSelected(
+      reader: reader(first: ["c", "x.txt"], all: ["c", "x.txt", "a"], heldAt: gate))
+
+    let firstReturn = Task { await model.goBack() }
+    await gate.waitUntilReached()
+    // The first rows are showing and nothing is selected: x is still owed.
+    await model.goForward()
+    #expect(model.location == other)
+
+    let secondReturn = Task { await model.goBack() }
+    await gate.open()
+    await firstReturn.value
+    await secondReturn.value
+    #expect(model.location == big)
+    #expect(model.state == .loaded)
+    #expect(selectedNames(model) == ["x.txt"])
+  }
+
+  @Test func aSelectionMadeInTheFirstRowsIsWhatLeavingRemembers() async throws {
+    let gate = Gate()
+    let model = await modelThatLeftBigWithXSelected(
+      reader: reader(first: ["c", "x.txt"], all: ["c", "x.txt", "a"], heldAt: gate))
+
+    let firstReturn = Task { await model.goBack() }
+    await gate.waitUntilReached()
+    model.selection = [try #require(model.items.first { $0.name == "c" }).url]
+    await model.goForward()
+
+    let secondReturn = Task { await model.goBack() }
+    await gate.open()
+    await firstReturn.value
+    await secondReturn.value
+    #expect(model.location == big)
+    #expect(selectedNames(model) == ["c"])
+  }
+
+  @Test func aLoadLeftWhileItsFirstRowsAreShowingPublishesNothingMore() async throws {
+    let gate = Gate()
+    let model = BrowserModel(
+      location: big, reader: reader(first: ["c", "a"], all: ["c", "a", "b"], heldAt: gate))
+
+    let load = Task { await model.load() }
+    await gate.waitUntilReached()
+    await model.navigate(to: other)
+    #expect(model.items.map(\.name) == ["elsewhere.txt"])
+    var changes = 0
+    model.onChange = { changes += 1 }
+
+    await gate.open()
+    await load.value
+    #expect(changes == 0)
+    #expect(model.location == other)
+    #expect(model.items.map(\.name) == ["elsewhere.txt"])
+    #expect(model.state == .loaded)
+  }
+
+  /// The move alone retires the load in flight: the next load may start a
+  /// turn later, and the old one must not publish into the new folder first.
+  @Test func aMoveRetiresTheLoadInFlightBeforeTheNextLoadStarts() async throws {
+    let gate = Gate()
+    let model = BrowserModel(
+      location: big, reader: reader(first: ["c", "a"], all: ["c", "a", "b"], heldAt: gate))
+
+    let load = Task { await model.load() }
+    await gate.waitUntilReached()
+    #expect(model.items.map(\.name) == ["c", "a"])
+    #expect(model.move(to: other))
+    var changes = 0
+    model.onChange = { changes += 1 }
+
+    await gate.open()
+    await load.value
+    #expect(changes == 0)
+    #expect(model.location == other)
+    #expect(model.items.isEmpty)
+  }
+
+  @Test func whileTheSortIsHeldTheMainActorIsFreeAndANewerLoadWins() async throws {
+    let sortGate = Gate()
+    let model = BrowserModel(
+      location: big,
+      reader: StubReader(
+        results: [
+          big: ["c", "a", "b"].map { item($0, in: big) }, other: [item("elsewhere.txt", in: other)],
+        ],
+        firstItems: [big: ["c", "a"].map { item($0, in: big) }]),
+      arrange: arrangeHeldOnce(at: sortGate))
+
+    let load = Task { await model.load() }
+    await sortGate.waitUntilReached()
+    // This test runs on the main actor, so the sort is not holding it.
+    #expect(model.state == .loading)
+    #expect(model.items.map(\.name) == ["c", "a"])
+    #expect(model.move(to: other))
+    await model.load()
+    #expect(model.items.map(\.name) == ["elsewhere.txt"])
+    var changes = 0
+    model.onChange = { changes += 1 }
+
+    await sortGate.open()
+    await load.value
+    #expect(changes == 0)
+    #expect(model.items.map(\.name) == ["elsewhere.txt"])
+    #expect(model.state == .loaded)
+  }
+
+  @Test func cancellingWhileTheFirstRowsAreShowingPublishesNothingMoreAndStopsTheListing()
+    async throws
+  {
+    let gate = Gate()
+    let reader = reader(first: ["c", "a"], all: ["c", "a", "b"], heldAt: gate)
+    let model = BrowserModel(location: big, reader: reader)
+
+    let load = Task { await model.load() }
+    await gate.waitUntilReached()
+    var changes = 0
+    model.onChange = { changes += 1 }
+    load.cancel()
+    await gate.open()
+    await load.value
+    #expect(changes == 0)
+    #expect(model.state == .loading)
+    #expect(model.items.map(\.name) == ["c", "a"])
+    #expect(reader.cancelledListings.value == [big])
+  }
+
+  @Test func cancellingWhileTheSortIsHeldPublishesNothingMore() async throws {
+    let sortGate = Gate()
+    let model = BrowserModel(
+      location: big,
+      reader: StubReader(results: [big: ["c", "a", "b"].map { item($0, in: big) }]),
+      arrange: arrangeHeldOnce(at: sortGate))
+
+    let load = Task { await model.load() }
+    await sortGate.waitUntilReached()
+    var changes = 0
+    model.onChange = { changes += 1 }
+    load.cancel()
+    await sortGate.open()
+    await load.value
+    #expect(changes == 0)
+    #expect(model.state == .loading)
+    #expect(model.items.isEmpty)
+  }
+
+  @Test func aLoadCancelledBeforeItsListingArrivesShowsNoRows() async throws {
+    let model = BrowserModel(location: big, reader: ArrivedReader(folder: big))
+    var changes = 0
+    model.onChange = { changes += 1 }
+
+    // The task is cancelled before it has run, with both events waiting.
+    let load = Task { await model.load() }
+    load.cancel()
+    await load.value
+    #expect(model.items.isEmpty)
+    #expect(model.state == .loading)
+    #expect(changes == 1)
+  }
+
+  @Test func aListingThatFailsAfterItsFirstRowsClearsThemAndReportsWhy() async throws {
+    // No listing follows the first items, so the stub fails there.
+    let model = BrowserModel(
+      location: big,
+      reader: StubReader(results: [:], firstItems: [big: ["c", "a"].map { item($0, in: big) }]))
+    var published: [[String]] = []
+    model.onChange = { published.append(model.items.map(\.name)) }
+
+    await model.load()
+    #expect(published == [[], ["c", "a"], []])
+    #expect(model.selection.isEmpty)
+    guard case .failed(let message) = model.state else {
+      Issue.record("Expected a failed state, got \(model.state)")
+      return
+    }
+    #expect(!message.isEmpty)
+  }
+
+  @Test func aListingThatEndsWithoutAllItsItemsFails() async throws {
+    let model = BrowserModel(
+      location: big,
+      reader: StubReader(
+        results: [big: [item("never.txt", in: big)]],
+        firstItems: [big: ["c", "a"].map { item($0, in: big) }],
+        endingEarly: [big]))
+
+    await model.load()
+    #expect(model.items.isEmpty)
+    #expect(model.state == .failed(DirectoryReadError.incomplete(big).localizedDescription))
+  }
+
+  @Test func reloadingKeepsTheRowsUntilTheSortedResultReplacesThem() async throws {
+    let gate = Gate()
+    let model = BrowserModel(
+      location: big, reader: reader(first: ["c", "a"], all: ["c", "a", "b"], heldAt: gate))
+    let firstLoad = Task { await model.load() }
+    await gate.open()
+    await firstLoad.value
+    #expect(model.items.map(\.name) == ["a", "b", "c"])
+    model.selection = [try #require(model.items.first { $0.name == "b" }).url]
+
+    // The reload gives a different order, so its arrival can be seen.
+    model.sort = FileItemSort(ascending: false)
+    await gate.close()
+    var changes = 0
+    model.onChange = { changes += 1 }
+    let reload = Task { await model.load() }
+    await gate.waitUntilReached()
+    #expect(model.items.map(\.name) == ["a", "b", "c"])
+    #expect(changes == 1)
+
+    await gate.open()
+    await reload.value
+    #expect(model.items.map(\.name) == ["c", "b", "a"])
+    #expect(selectedNames(model) == ["b"])
+    #expect(changes == 2)
+  }
+}
+
+/// A listing whose two events are both waiting in the stream when it is
+/// returned, as a folder that was read before its consumer ran.
+private struct ArrivedReader: DirectoryReading {
+  let folder: URL
+
+  func listing(in directory: URL) -> AsyncThrowingStream<DirectoryListingEvent, any Error> {
+    AsyncThrowingStream { continuation in
+      let items = [FileItem(url: folder.appending(path: "a.txt"), kind: .file)]
+      continuation.yield(.firstItems(items))
+      continuation.yield(.allItems(items))
+      continuation.finish()
+    }
+  }
 }

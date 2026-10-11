@@ -2,8 +2,8 @@ import BrowserUI
 import TestSupport
 import XCTest
 
-/// End-to-end tests of the walking skeleton: the app opens on a folder given
-/// at launch, lists it and navigates into a subfolder.
+/// End-to-end tests of browsing: the app opens on a folder given at launch,
+/// lists it, navigates into a subfolder, and settles a large folder.
 final class BrowsingTests: XCTestCase {
   private var tree: FixtureTree!
   private var app: XCUIApplication!
@@ -98,5 +98,48 @@ final class BrowsingTests: XCTestCase {
     XCTAssertTrue(status.waitForExistence(timeout: 10), "No explanation was shown")
     XCTAssertFalse((status.value as? String ?? "").isEmpty)
     XCTAssertEqual(app.tables[AccessibilityElement.fileList.identifier].tableRows.count, 0)
+  }
+
+  /// A folder larger than the reader's first batch of 2,000 items reaches the
+  /// list twice: its first rows as they were read, then the sorted list with
+  /// the selection restored (Phase 1A step 3). Only the first two rows are
+  /// asked for, so nothing off screen is.
+  @MainActor
+  func testALargeFolderSettlesIntoSortedOrderAndRestoresTheSelection() throws {
+    let large = try FixtureTree.build {
+      // Sorts ahead of every file.
+      FixtureNode.directory("Before") {
+        FixtureNode.file("inside.txt")
+      }
+      for index in 0..<3_000 {
+        FixtureNode.file(FixtureNames.numbered(index))
+      }
+    }
+    addTeardownBlock { try? large.remove() }
+
+    let table = launch(on: large.root)
+    let first = table.tableRows.element(boundBy: 0)
+    let second = table.tableRows.element(boundBy: 1)
+    XCTAssertTrue(
+      first.staticTexts["Before"].waitForExistence(timeout: 30),
+      "The list did not settle with the folder first")
+    XCTAssertTrue(
+      second.staticTexts["file-000000.txt"].waitForExistence(timeout: 30),
+      "The list did not settle with the first file second")
+
+    // Opening the folder by double-click leaves it selected in the history.
+    first.staticTexts["Before"].doubleClick()
+    XCTAssertTrue(table.staticTexts["inside.txt"].waitForExistence(timeout: 10))
+
+    app.typeKey("[", modifierFlags: .command)
+    // The selection is restored when the list settles, not in the first rows.
+    let restored = XCTNSPredicateExpectation(
+      predicate: NSPredicate { _, _ in first.isSelected }, object: nil)
+    XCTAssertEqual(
+      XCTWaiter.wait(for: [restored], timeout: 30), .completed,
+      "The first row was not selected after going back")
+    XCTAssertTrue(first.staticTexts["Before"].exists)
+    XCTAssertTrue(second.staticTexts["file-000000.txt"].exists)
+    XCTAssertFalse(second.isSelected)
   }
 }

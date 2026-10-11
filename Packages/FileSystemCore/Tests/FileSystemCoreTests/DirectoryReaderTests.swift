@@ -166,30 +166,248 @@ import Testing
     #expect(checks.value == [0, interval])
   }
 
-  @Test func runsOffTheMainThread() async throws {
+  @Test func theStreamIsReadOffTheMainThreadWhenConsumedOnTheMainActor() async throws {
     let tree = try FixtureTree.build { FixtureNode.file("a.txt") }
     defer { try? tree.remove() }
+    let folder = tree.root
 
-    let reader = MainThreadRecordingReader()
-    _ = try await Task { @MainActor in try await reader.items(in: tree.root) }.value
-    #expect(reader.ranOnMainThread.value == false)
+    let ranOnMainThread = Recorded<[Bool]>([])
+    let counts = try await Task { @MainActor in
+      var counts: [Int] = []
+      let listing = DirectoryReader.listing(in: folder) { _ in
+        ranOnMainThread.value += [pthread_main_np() != 0]
+      }
+      for try await event in listing {
+        counts.append(event.count)
+      }
+      return counts
+    }.value
+    #expect(counts == [1])
+    #expect(ranOnMainThread.value == [false])
+  }
+
+  // MARK: First items
+
+  /// The events of a listing, read to its end.
+  private func collected(
+    _ listing: AsyncThrowingStream<DirectoryListingEvent, any Error>
+  ) async throws -> [DirectoryListingEvent] {
+    var events: [DirectoryListingEvent] = []
+    for try await event in listing {
+      events.append(event)
+    }
+    return events
+  }
+
+  @Test func aFolderOfOneBatchYieldsOnlyAllItems() async throws {
+    let batch = DirectoryReader.firstBatchSize
+    let tree = try FixtureTree.build {
+      FixtureNode.files(count: batch, in: "OneBatch")
+    }
+    defer { try? tree.remove() }
+
+    let events = try await collected(DirectoryReader().listing(in: tree.url("OneBatch")))
+    guard case .allItems(let all) = events.first, events.count == 1 else {
+      Issue.record("Expected one all-items event, got \(events.map(\.count))")
+      return
+    }
+    #expect(all.count == batch)
+  }
+
+  @Test func aFolderOfOneItemMoreYieldsFirstItemsThenAllItems() async throws {
+    let batch = DirectoryReader.firstBatchSize
+    let tree = try FixtureTree.build {
+      FixtureNode.files(count: batch + 1, in: "OneMore")
+    }
+    defer { try? tree.remove() }
+
+    let events = try await collected(DirectoryReader().listing(in: tree.url("OneMore")))
+    guard events.count == 2, case .firstItems(let first) = events[0],
+      case .allItems(let all) = events[1]
+    else {
+      Issue.record("Expected first items then all items, got \(events.map(\.count))")
+      return
+    }
+    #expect(first.count == batch)
+    #expect(all.count == batch + 1)
+    #expect(Array(all.prefix(batch)) == first)
+    #expect(Set(all.map(\.url)).count == batch + 1)
+  }
+
+  @Test func theFirstItemsDoNotDependOnHowLargeTheFolderIs() async throws {
+    let batch = DirectoryReader.firstBatchSize
+    let tree = try FixtureTree.build {
+      FixtureNode.files(count: batch, in: "OneBatch")
+      FixtureNode.files(count: batch + 1, in: "OneMore")
+      FixtureNode.files(count: batch * 3, in: "Large")
+    }
+    defer { try? tree.remove() }
+
+    /// How many items had been read each time the first items were handed over.
+    func handOvers(in folder: String) async throws -> [Int] {
+      let url = tree.url(folder)
+      return try await Task {
+        var counts: [Int] = []
+        _ = try DirectoryReader.readItems(in: url, onFirstItems: { counts.append($0.count) })
+        return counts
+      }.value
+    }
+    #expect(try await handOvers(in: "OneBatch") == [])
+    #expect(try await handOvers(in: "OneMore") == [batch])
+    #expect(try await handOvers(in: "Large") == [batch])
+  }
+
+  @Test func aFailedListingFailsTheStreamAndYieldsNoEvent() async throws {
+    let tree = try FixtureTree.build {
+      FixtureNode.file("file.txt")
+      FixtureNode.directory("Locked") {
+        FixtureNode.file("secret.txt")
+      }.permissions(0o000)
+    }
+    defer { try? tree.remove() }
+
+    /// The events a listing yielded and the error that ended it.
+    func outcome(of folder: String) async -> (events: [DirectoryListingEvent], error: (any Error)?)
+    {
+      var events: [DirectoryListingEvent] = []
+      do {
+        for try await event in DirectoryReader().listing(in: tree.url(folder)) {
+          events.append(event)
+        }
+        return (events, nil)
+      } catch {
+        return (events, error)
+      }
+    }
+    let missing = await outcome(of: "missing")
+    #expect(missing.events.isEmpty)
+    #expect(missing.error != nil)
+    let file = await outcome(of: "file.txt")
+    #expect(file.events.isEmpty)
+    #expect(file.error as? DirectoryReadError == .notADirectory(tree.url("file.txt")))
+    let locked = await outcome(of: "Locked")
+    #expect(locked.events.isEmpty)
+    #expect(locked.error != nil)
+  }
+
+  @Test func cancellingAfterTheFirstItemsYieldsNoAllItems() async throws {
+    let batch = DirectoryReader.firstBatchSize
+    let interval = DirectoryReader.cancellationInterval
+    // The first cancellation check after the first items were handed over.
+    let checkAfterFirstItems = (batch / interval + 1) * interval
+    let tree = try FixtureTree.build {
+      FixtureNode.files(count: checkAfterFirstItems + interval * 2, in: "Many")
+    }
+    defer { try? tree.remove() }
+
+    let checks = Recorded<[Int]>([])
+    let listing = DirectoryReader.listing(in: tree.url("Many")) { itemsRead in
+      checks.value += [itemsRead]
+      // Cancel the listing from inside, once the first items have gone out.
+      if itemsRead == checkAfterFirstItems {
+        withUnsafeCurrentTask { $0?.cancel() }
+      }
+    }
+    var events: [DirectoryListingEvent] = []
+    await #expect(throws: CancellationError.self) {
+      for try await event in listing {
+        events.append(event)
+      }
+    }
+    guard case .firstItems(let first) = events.first, events.count == 1 else {
+      Issue.record("Expected only first items, got \(events.map(\.count))")
+      return
+    }
+    #expect(first.count == batch)
+    // It stops at the check that follows the cancellation: nothing more is read.
+    #expect(checks.value.last == checkAfterFirstItems)
+  }
+
+  @Test func cancellingTheConsumerEndsTheStreamQuietlyAndCancelsTheListing() async throws {
+    let interval = DirectoryReader.cancellationInterval
+    let tree = try FixtureTree.build {
+      FixtureNode.files(count: interval * 4, in: "Many")
+    }
+    defer { try? tree.remove() }
+
+    let consumer = Recorded<Task<[DirectoryListingEvent], any Error>?>(nil)
+    // The listing waits at its first check until the consumer can be cancelled,
+    // and at the next until the consumer has ended, so nothing here is a race.
+    let consumerIsKnown = DispatchSemaphore(value: 0)
+    let consumerHasEnded = DispatchSemaphore(value: 0)
+    let (listingWasCancelled, report) = AsyncStream<Bool>.makeStream()
+    let listing = DirectoryReader.listing(in: tree.url("Many")) { itemsRead in
+      if itemsRead == 0 {
+        consumerIsKnown.wait()
+      }
+      if itemsRead == interval {
+        consumer.value?.cancel()
+        consumerHasEnded.wait()
+        report.yield(withUnsafeCurrentTask { $0?.isCancelled } ?? false)
+        report.finish()
+      }
+    }
+    let task = Task { try await collected(listing) }
+    consumer.value = task
+    consumerIsKnown.signal()
+
+    // The loop over a cancelled stream ends; it does not throw.
+    #expect(try await task.value == [])
+    #expect(task.isCancelled)
+    consumerHasEnded.signal()
+    // Ending the stream cancelled the task that reads the folder.
+    var reports: [Bool] = []
+    for await wasCancelled in listingWasCancelled {
+      reports.append(wasCancelled)
+    }
+    #expect(reports == [true])
+  }
+
+  @Test func itemsReturnsWhatTheAllItemsEventCarries() async throws {
+    let batch = DirectoryReader.firstBatchSize
+    let tree = try FixtureTree.build {
+      FixtureNode.files(count: batch + 1, in: "OneMore")
+    }
+    defer { try? tree.remove() }
+    let folder = tree.url("OneMore")
+
+    let events = try await collected(DirectoryReader().listing(in: folder))
+    let items = try await DirectoryReader().items(in: folder)
+    #expect(events.last == .allItems(items))
+  }
+
+  @Test func aListingThatEndsWithoutAllItemsIsAnError() async throws {
+    let folder = URL(filePath: "/fixture/folder", directoryHint: .isDirectory)
+    await #expect(throws: DirectoryReadError.incomplete(folder)) {
+      try await EndingEarlyReader().items(in: folder)
+    }
+    #expect(
+      DirectoryReadError.incomplete(folder).localizedDescription
+        == "The contents of folder could not be read.")
   }
 }
 
-/// Records which thread a nonisolated async listing runs on when awaited from
-/// the main actor, the way the browser awaits ``DirectoryReader``.
-private struct MainThreadRecordingReader: DirectoryReading {
-  let ranOnMainThread = Recorded<Bool?>(nil)
-
-  func items(in directory: URL) async throws -> [FileItem] {
-    ranOnMainThread.value = Self.isMainThread()
-    return try await DirectoryReader().items(in: directory)
+extension DirectoryListingEvent {
+  /// How many items the event carries.
+  fileprivate var count: Int {
+    switch self {
+    case .firstItems(let items), .allItems(let items): items.count
+    }
   }
-
-  private static func isMainThread() -> Bool { pthread_main_np() != 0 }
 }
 
-private final class Recorded<Value: Sendable>: @unchecked Sendable {
+/// A listing that hands over first items and then ends.
+private struct EndingEarlyReader: DirectoryReading {
+  func listing(in directory: URL) -> AsyncThrowingStream<DirectoryListingEvent, any Error> {
+    AsyncThrowingStream { continuation in
+      continuation.yield(.firstItems([]))
+      continuation.finish()
+    }
+  }
+}
+
+/// A value written and read from any thread.
+final class Recorded<Value: Sendable>: @unchecked Sendable {
   // Guarded by `lock`.
   private var stored: Value
   private let lock = NSLock()

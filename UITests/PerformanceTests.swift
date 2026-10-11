@@ -3,10 +3,11 @@ import TestSupport
 import XCTest
 
 /// Time to first rows in a large folder (quality bar 4), measured from the
-/// app's own `LoadFolder` signpost interval: from the request to load until
-/// the list has been given its rows.
+/// app's own `FirstRows` signpost interval: from the request to load until
+/// the list has been given its first rows, before the folder is sorted.
 ///
-/// Run with `make perf`. `make uitest` skips this class.
+/// Run with `make perf`, which judges the average against the target in
+/// `docs/performance/targets.json`. `make uitest` skips this class.
 final class PerformanceTests: XCTestCase {
   private var tree: FixtureTree!
 
@@ -32,15 +33,18 @@ final class PerformanceTests: XCTestCase {
     let folder = table.staticTexts["Items10000"]
     XCTAssertTrue(folder.waitForExistence(timeout: 10))
 
-    let loadFolder = XCTOSSignpostMetric(
-      subsystem: "com.mjmcport.cairn", category: "performance", name: "LoadFolder")
+    let firstRows = XCTOSSignpostMetric(
+      subsystem: "com.mjmcport.cairn", category: "performance",
+      name: BrowserModel.firstRowsSignpostName.description)
     let options = XCTMeasureOptions()
     options.iterationCount = 5
     options.invocationOptions = [.manuallyStart, .manuallyStop]
 
-    measure(metrics: [loadFolder], options: options) {
+    measure(metrics: [firstRows], options: options) {
       startMeasuring()
       folder.doubleClick()
+      // The interval has ended by the time any row exists, so it does not
+      // matter whether this file is among the first rows or arrives sorted.
       XCTAssertTrue(table.staticTexts["file-000000.txt"].waitForExistence(timeout: 30))
       stopMeasuring()
 

@@ -11,7 +11,20 @@ import Testing
   private var deeper: URL { sub.appending(path: "Deeper", directoryHint: .isDirectory) }
 
   /// `/fixture` holds `a.txt` and `Sub`; `Sub` holds `Deeper` and `inner.txt`.
-  private func reader(gates: [URL: Gate] = [:]) -> StubReader {
+  /// - Parameter gateAfterFirstItemsOfSub: Makes `Sub` hand `inner.txt` over
+  ///   first, then hold at this gate before its whole listing.
+  private func reader(gates: [URL: Gate] = [:], gateAfterFirstItemsOfSub: Gate? = nil)
+    -> StubReader
+  {
+    var reader = reader(gates: gates)
+    if let gate = gateAfterFirstItemsOfSub {
+      reader.firstItems[sub] = [FileItem(url: sub.appending(path: "inner.txt"), kind: .file)]
+      reader.gatesAfterFirstItems[sub] = gate
+    }
+    return reader
+  }
+
+  private func reader(gates: [URL: Gate]) -> StubReader {
     StubReader(
       results: [
         root: [
@@ -28,10 +41,12 @@ import Testing
   }
 
   /// A pane on `/fixture` in a window, with its first tab loaded.
-  private func paneInAWindow(gates: [URL: Gate] = [:]) async -> (
-    pane: PaneViewController, window: NSWindow
-  ) {
-    let pane = PaneViewController(location: root, reader: reader(gates: gates))
+  private func paneInAWindow(gates: [URL: Gate] = [:], gateAfterFirstItemsOfSub: Gate? = nil)
+    async -> (pane: PaneViewController, window: NSWindow)
+  {
+    let pane = PaneViewController(
+      location: root,
+      reader: reader(gates: gates, gateAfterFirstItemsOfSub: gateAfterFirstItemsOfSub))
     let window = NSWindow(contentViewController: pane)
     await pane.showingBrowser.loadTask?.value
     return (pane, window)
@@ -362,6 +377,59 @@ import Testing
     #expect(window.firstResponder === focused)
     #expect(buttons(.tab, in: pane).map(\.title) == ["fixture", "Sub"])
     #expect(!isShown(second, in: pane))
+  }
+
+  @Test func aTabLeftBetweenItsFirstRowsAndItsSortedListFinishesWithoutTouchingTheWindow()
+    async throws
+  {
+    // Left before its first rows, the tab makes both arrivals out of sight;
+    // left after them, the sorted list alone.
+    for leavingBeforeTheFirstRows in [true, false] {
+      let before = Gate()
+      let between = Gate()
+      let (pane, window) = await paneInAWindow(
+        gates: [sub: before], gateAfterFirstItemsOfSub: between)
+      let first = pane.showingBrowser
+      pane.newTab(nil)
+      let second = pane.showingBrowser
+      await settle(pane)
+
+      try select("Sub", in: second)
+      second.openSelection(nil)
+      if leavingBeforeTheFirstRows {
+        await before.waitUntilReached()
+        #expect(second.model.items.isEmpty)
+      } else {
+        await before.open()
+        await between.waitUntilReached()
+        #expect(second.model.items.map(\.name) == ["inner.txt"])
+      }
+
+      pane.showPreviousTab(nil)
+      try #require(pane.showingBrowser === first)
+      let focused = window.firstResponder
+      #expect(focused === (try table(of: first)))
+      #expect(window.title == "fixture")
+      var arrivals = 0
+      let redraw = second.model.onChange
+      second.model.onChange = {
+        arrivals += 1
+        redraw?()
+      }
+
+      await before.open()
+      await between.open()
+      await settle(pane)
+      #expect(arrivals == (leavingBeforeTheFirstRows ? 2 : 1))
+      #expect(second.model.state == .loaded)
+      #expect(second.model.items.map(\.name) == ["Deeper", "inner.txt"])
+      #expect(window.title == "fixture")
+      #expect(window.firstResponder === focused)
+      #expect(try table(of: first).numberOfRows == 2)
+      #expect(first.model.items.map(\.name) == ["a.txt", "Sub"])
+      #expect(buttons(.tab, in: pane).map(\.title) == ["fixture", "Sub"])
+      #expect(!isShown(second, in: pane))
+    }
   }
 
   // MARK: Keyboard focus

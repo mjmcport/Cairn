@@ -522,6 +522,269 @@ import Testing
     #expect(controller.model.items.isEmpty)
   }
 
+  // MARK: First rows, then the sorted list
+
+  private let big = URL(filePath: "/fixture/big", directoryHint: .isDirectory)
+  private let small = URL(filePath: "/fixture/small", directoryHint: .isDirectory)
+
+  private func file(_ name: String, in folder: URL) -> FileItem {
+    FileItem(url: folder.appending(path: name), kind: .file)
+  }
+
+  /// A listing of `big` that hands over `first` and is then held at `gate`
+  /// before it hands over `all`. `small` holds one file and is not held.
+  private func reader(first: [FileItem], all: [FileItem], heldAt gate: Gate) -> StubReader {
+    StubReader(
+      results: [big: all, small: [file("only.txt", in: small)]],
+      firstItems: [big: first],
+      gatesAfterFirstItems: [big: gate])
+  }
+
+  /// The same, for a folder of plain files.
+  private func reader(first: [String], all: [String], heldAt gate: Gate) -> StubReader {
+    reader(
+      first: first.map { file($0, in: big) }, all: all.map { file($0, in: big) }, heldAt: gate)
+  }
+
+  /// `count` names that sort in the order given, however they are listed.
+  private func numberedNames(_ count: Int) -> [String] {
+    (0..<count).map { FixtureNames.numbered($0) }
+  }
+
+  /// The names the table shows, read from its cells.
+  private func rowNames(of table: NSTableView) -> [String?] {
+    (0..<table.numberOfRows).map {
+      (table.view(atColumn: 0, row: $0, makeIfNecessary: true) as? NSTableCellView)?
+        .textField?.stringValue
+    }
+  }
+
+  /// A browser on `big` whose load is held between its two events, with the
+  /// first rows in the table.
+  private func browserShowingFirstRows(of reader: StubReader, heldAt gate: Gate) async throws -> (
+    controller: BrowserViewController, table: NSTableView
+  ) {
+    let controller = BrowserViewController(location: big, reader: reader)
+    let table = try #require(Self.firstSubview(of: NSTableView.self, in: controller.view))
+    await gate.waitUntilReached()
+    return (controller, table)
+  }
+
+  /// A browser that showed `big`, settled, has gone on to `small` and is on
+  /// its way back, held between the two events of `big`. `selecting` is the
+  /// row that was selected in `big` when it was left.
+  private func browserGoingBackToBig(
+    reader: StubReader, heldAt gate: Gate, selecting row: Int? = nil
+  ) async throws -> (controller: BrowserViewController, table: NSTableView) {
+    await gate.open()
+    let controller = BrowserViewController(location: big, reader: reader)
+    let table = try #require(Self.firstSubview(of: NSTableView.self, in: controller.view))
+    await controller.loadTask?.value
+    if let row {
+      table.selectRowIndexes([row], byExtendingSelection: false)
+    }
+    await controller.model.navigate(to: small)
+
+    await gate.close()
+    controller.goBack(nil)
+    await gate.waitUntilReached()
+    return (controller, table)
+  }
+
+  @Test func theTableShowsTheFirstRowsUnsortedAndThenTheSortedList() async throws {
+    let gate = Gate()
+    let (controller, table) = try await browserShowingFirstRows(
+      of: reader(first: ["c", "a"], all: ["c", "a", "b"], heldAt: gate), heldAt: gate)
+    let status = try #require(
+      controller.view.subviews.first { $0.accessibilityIdentifier() == "browser-status" })
+
+    #expect(rowNames(of: table) == ["c", "a"])
+    #expect(table.selectedRowIndexes.isEmpty)
+    #expect(status.isHidden)
+
+    await gate.open()
+    await controller.loadTask?.value
+    #expect(rowNames(of: table) == ["a", "b", "c"])
+    #expect(status.isHidden)
+  }
+
+  @Test func aRememberedRowBeyondTheFirstRowsIsSelectedOnceWhenTheListSettles() async throws {
+    let gate = Gate()
+    // z was selected when the folder was left, and is not among the first rows.
+    let (controller, table) = try await browserGoingBackToBig(
+      reader: reader(first: ["c", "a"], all: ["c", "a", "b", "z"], heldAt: gate), heldAt: gate,
+      selecting: 3)
+    #expect(rowNames(of: table) == ["c", "a"])
+    #expect(table.selectedRowIndexes.isEmpty)
+
+    var selectionChanges = 0
+    let observer = NotificationCenter.default.addObserver(
+      forName: NSTableView.selectionDidChangeNotification, object: table, queue: nil
+    ) { _ in
+      MainActor.assumeIsolated { selectionChanges += 1 }
+    }
+    defer { NotificationCenter.default.removeObserver(observer) }
+
+    await gate.open()
+    await controller.loadTask?.value
+    #expect(rowNames(of: table) == ["a", "b", "c", "z"])
+    #expect(table.selectedRowIndexes == [3])
+    #expect(selectionChanges == 1)
+    #expect(controller.model.selection.map(\.lastPathComponent) == ["z"])
+  }
+
+  @Test func aRowSelectedInTheFirstRowsStaysSelectedAndIsBroughtIntoView() async throws {
+    let names = numberedNames(200)
+    let gate = Gate()
+    // The first rows are the folder's last 50 items, so the first of them moves
+    // from row 0 to row 150 when the list settles.
+    let (controller, table) = try await browserShowingFirstRows(
+      of: reader(first: Array(names[150...]), all: names.reversed(), heldAt: gate), heldAt: gate)
+    let window = NSWindow(contentViewController: controller)
+    window.layoutIfNeeded()
+    try #require(rowNames(of: table).first == names[150])
+
+    table.selectRowIndexes([0], byExtendingSelection: false)
+    try #require(!table.rows(in: table.visibleRect).contains(150))
+
+    await gate.open()
+    await controller.loadTask?.value
+    #expect(table.numberOfRows == 200)
+    #expect(table.selectedRowIndexes == [150])
+    #expect(controller.model.selection.map(\.lastPathComponent) == [names[150]])
+    #expect(table.rows(in: table.visibleRect).contains(150))
+  }
+
+  @Test func theListKeepsItsScrollOffsetWhenItSettlesWithNothingSelected() async throws {
+    let names = numberedNames(400)
+    let gate = Gate()
+    let (controller, table) = try await browserShowingFirstRows(
+      of: reader(first: Array(names[..<200].reversed()), all: names, heldAt: gate), heldAt: gate)
+    let window = NSWindow(contentViewController: controller)
+    window.layoutIfNeeded()
+    let clipView = try #require(table.enclosingScrollView?.contentView)
+
+    table.scrollRowToVisible(120)
+    let scrolled = clipView.bounds.origin
+    try #require(scrolled.y > 0)
+
+    await gate.open()
+    await controller.loadTask?.value
+    #expect(table.numberOfRows == 400)
+    #expect(clipView.bounds.origin == scrolled)
+  }
+
+  @Test func keyboardFocusStaysWhereItIsThroughBothArrivals() async throws {
+    for focusInTheList in [false, true] {
+      let gate = Gate()
+      let controller = BrowserViewController(
+        location: big, reader: reader(first: ["c", "a"], all: ["c", "a", "b"], heldAt: gate))
+      let (window, other) = window(holding: controller)
+      let table = try #require(Self.firstSubview(of: NSTableView.self, in: controller.view))
+      let focused: NSResponder = focusInTheList ? table : other
+      try #require(window.makeFirstResponder(focused))
+
+      await gate.waitUntilReached()
+      try #require(table.numberOfRows == 2)
+      #expect(window.firstResponder === focused)
+
+      await gate.open()
+      await controller.loadTask?.value
+      try #require(table.numberOfRows == 3)
+      #expect(window.firstResponder === focused)
+    }
+  }
+
+  @Test func openingAFolderInTheFirstRowsCancelsTheHeldLoadAndShowsThatFolder() async throws {
+    let sub = big.appending(path: "Sub", directoryHint: .isDirectory)
+    let folder = FileItem(url: sub, kind: .directory)
+    let gate = Gate()
+    var reader = reader(
+      first: [file("c", in: big), folder], all: [file("c", in: big), folder, file("a", in: big)],
+      heldAt: gate)
+    reader.results[sub] = [file("inner.txt", in: sub)]
+    let (controller, table) = try await browserShowingFirstRows(of: reader, heldAt: gate)
+    let held = try #require(controller.loadTask)
+
+    table.selectRowIndexes([1], byExtendingSelection: false)
+    controller.openSelection(nil)
+    // Required, not expected: a load that was not replaced would be awaited at the gate forever.
+    try #require(held.isCancelled)
+    await controller.loadTask?.value
+    #expect(controller.model.location == sub)
+    #expect(controller.model.state == .loaded)
+    #expect(rowNames(of: table) == ["inner.txt"])
+
+    // The rest of the folder that was left arrives late and changes nothing.
+    await gate.open()
+    await held.value
+    #expect(controller.model.location == sub)
+    #expect(rowNames(of: table) == ["inner.txt"])
+  }
+
+  @Test func backSentTwiceWhileTheFirstRowsAreShowingEndsOnThePreviousFolder() async throws {
+    let gate = Gate()
+    let controller = BrowserViewController(
+      location: small, reader: reader(first: ["c", "a"], all: ["c", "a", "b"], heldAt: gate))
+    let table = try #require(Self.firstSubview(of: NSTableView.self, in: controller.view))
+    await controller.loadTask?.value
+    controller.model.move(to: big)
+    let held = Task { await controller.model.load() }
+    await gate.waitUntilReached()
+    try #require(rowNames(of: table) == ["c", "a"])
+
+    // No await between the two: the first one's task has not started.
+    controller.goBack(nil)
+    controller.goBack(nil)
+    await controller.loadTask?.value
+    #expect(controller.model.state == .loaded)
+    #expect(controller.model.location == small)
+    #expect(rowNames(of: table) == ["only.txt"])
+
+    await gate.open()
+    await held.value
+    #expect(controller.model.location == small)
+    #expect(rowNames(of: table) == ["only.txt"])
+  }
+
+  @Test func cancellingTheLoadWhileTheFirstRowsAreShowingPublishesNothingMore() async throws {
+    let gate = Gate()
+    let (controller, table) = try await browserShowingFirstRows(
+      of: reader(first: ["c", "a"], all: ["c", "a", "b"], heldAt: gate), heldAt: gate)
+    let held = try #require(controller.loadTask)
+
+    controller.cancelLoad()
+    try #require(held.isCancelled)
+    await gate.open()
+    await held.value
+    #expect(controller.model.state == .loading)
+    #expect(rowNames(of: table) == ["c", "a"])
+  }
+
+  @Test func aFolderOfOneBatchReachesTheTableAsOftenAsBefore() async throws {
+    /// How many times the model told the controller to redraw while it
+    /// opened `folder`, which is how often the table is reloaded.
+    func redraws(opening folder: URL, reader: StubReader) async -> Int {
+      let controller = BrowserViewController(location: folder, reader: reader)
+      _ = controller.view
+      var redraws = 0
+      let redraw = controller.model.onChange
+      controller.model.onChange = {
+        redraws += 1
+        redraw?()
+      }
+      await controller.loadTask?.value
+      return redraws
+    }
+    let gate = Gate()
+    await gate.open()
+    let reader = reader(first: ["c", "a"], all: ["c", "a", "b"], heldAt: gate)
+    // Loading and loaded, as before this step.
+    #expect(await redraws(opening: small, reader: reader) == 2)
+    // Loading, the first rows, loaded.
+    #expect(await redraws(opening: big, reader: reader) == 3)
+  }
+
   private static func firstSubview<View: NSView>(of type: View.Type, in view: NSView) -> View? {
     if let match = view as? View { return match }
     for subview in view.subviews {

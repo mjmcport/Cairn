@@ -46,7 +46,7 @@ import Testing
       try DirectoryReader.readItems(in: tree.root)
     }
     #expect(items.count == 1)
-    #expect(violations.all.map(\.entryPoint) == ["readItems(in:onCancellationCheck:)"])
+    #expect(violations.all.map(\.entryPoint) == ["readItems(in:onCancellationCheck:onFirstItems:)"])
   }
 
   @Test @MainActor func listingThroughTheAsyncAPIFromTheMainActorDoesNotTripTheGuard() async throws
@@ -59,6 +59,23 @@ import Testing
       try await DirectoryReader().items(in: tree.root)
     }
     #expect(items.count == 1)
+    #expect(violations.all.isEmpty)
+  }
+
+  @Test @MainActor func consumingTheListingStreamOnTheMainActorDoesNotTripTheGuard() async throws {
+    let tree = try FixtureTree.build { FixtureNode.file("a.txt") }
+    defer { try? tree.remove() }
+
+    let violations = Violations()
+    var counts: [Int] = []
+    try await MainThreadGuard.withHandler(violations.record) {
+      for try await event in DirectoryReader().listing(in: tree.root) {
+        if case .allItems(let items) = event {
+          counts.append(items.count)
+        }
+      }
+    }
+    #expect(counts == [1])
     #expect(violations.all.isEmpty)
   }
 

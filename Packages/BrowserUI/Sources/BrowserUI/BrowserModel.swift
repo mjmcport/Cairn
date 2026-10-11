@@ -16,7 +16,8 @@ public final class BrowserModel {
 
   /// Back and forward history. `history.current` is the folder being shown.
   public private(set) var history: BrowserHistory
-  /// The folder's items after hidden-file filtering and sorting.
+  /// The folder's items after hidden-file filtering and sorting. While a
+  /// large folder is loading they are its first rows, not yet sorted.
   public private(set) var items: [FileItem] = []
   public private(set) var state: State = .loading
   /// The selected items. The view writes this as the user selects; the model
@@ -39,27 +40,60 @@ public final class BrowserModel {
   /// Counts loads, so a slow listing of a folder the user has already left
   /// cannot overwrite the current one.
   private var generation = 0
-  /// What to select once the folder being loaded has been listed.
+  /// What to select once the folder being loaded has settled, unless the
+  /// user selects something first.
   private var selectionToRestore: Set<URL>?
-  /// What the history remembers for the folder being left. A folder left
-  /// before its listing arrived still owes the selection it was waiting to
-  /// restore; `selection` is empty until then.
-  private var selectionLeftBehind: Set<URL> { selectionToRestore ?? selection }
+  /// What is selected once the list settles, and what the history remembers
+  /// for a folder left before then: what the user has selected since the
+  /// move, or else what was waiting to be restored.
+  private var selectionWanted: Set<URL> {
+    selection.isEmpty ? selectionToRestore ?? [] : selection
+  }
 
-  public init(location: URL, reader: any DirectoryReading = DirectoryReader()) {
+  /// Filters and sorts a whole folder. Never runs on the main actor.
+  typealias Arrange =
+    @Sendable (_ items: [FileItem], _ sort: FileItemSort, _ includingHidden: Bool) async throws
+    -> [FileItem]
+  private let arrange: Arrange
+
+  public convenience init(location: URL, reader: any DirectoryReading = DirectoryReader()) {
+    self.init(location: location, reader: reader) { items, sort, includingHidden in
+      try await sort.arranged(items, includingHidden: includingHidden)
+    }
+  }
+
+  /// - Parameter arrange: Tests replace it to hold a load while it sorts.
+  init(location: URL, reader: any DirectoryReading, arrange: @escaping Arrange) {
     history = BrowserHistory(current: location)
     self.reader = reader
+    self.arrange = arrange
   }
 
   /// The signpost interval that covers a load, from the request until the
-  /// view has been told about the result.
+  /// view has been told about the settled result.
   public static let loadSignpostName: StaticString = "LoadFolder"
+  /// The signpost interval from the request until the list has rows: the
+  /// first rows of a large folder, or the sorted list of a smaller one.
+  public static let firstRowsSignpostName: StaticString = "FirstRows"
 
-  /// Lists the current folder and publishes the result. Reloading the folder
-  /// already showing keeps the selection of items that still exist.
+  /// Lists the current folder and publishes the result. A folder larger than
+  /// one batch is published twice when the list is empty: its first rows,
+  /// unsorted, while `state` is still `.loading`, and then the sorted list.
+  /// Reloading the folder already showing keeps its rows until the sorted
+  /// list replaces them, and keeps the selection of items that still exist.
   public func load() async {
-    let interval = Log.signposter.beginInterval(Self.loadSignpostName)
-    defer { Log.signposter.endInterval(Self.loadSignpostName, interval) }
+    let signposter = Log.signposter
+    let wholeLoad = signposter.beginInterval(Self.loadSignpostName)
+    var firstRows: OSSignpostIntervalState? = signposter.beginInterval(Self.firstRowsSignpostName)
+    func endFirstRows() {
+      guard let interval = firstRows else { return }
+      signposter.endInterval(Self.firstRowsSignpostName, interval)
+      firstRows = nil
+    }
+    defer {
+      endFirstRows()
+      signposter.endInterval(Self.loadSignpostName, wholeLoad)
+    }
 
     generation += 1
     let current = generation
@@ -67,17 +101,40 @@ public final class BrowserModel {
     state = .loading
     onChange?()
 
+    // After every wait, a load that was superseded or cancelled stops
+    // without publishing.
+    func isStillWanted() -> Bool { current == generation && !Task.isCancelled }
+
     do {
-      let listed = try await reader.items(in: folder)
-      guard current == generation else { return }
-      items = sort.sorted(listed.visible(includingHidden: showsHiddenFiles))
-      selection = Self.matching(selectionToRestore ?? selection, in: items)
+      var listed: [FileItem]?
+      for try await event in reader.listing(in: folder) {
+        guard isStillWanted() else { return }
+        switch event {
+        case .firstItems(let first):
+          // Only into an empty list: a reload keeps its rows until it settles.
+          guard items.isEmpty else { continue }
+          let rows = first.visible(includingHidden: showsHiddenFiles)
+          guard !rows.isEmpty else { continue }
+          items = rows
+          onChange?()
+          endFirstRows()
+        case .allItems(let all):
+          listed = all
+        }
+      }
+      // A cancelled listing ends without throwing.
+      guard isStillWanted() else { return }
+      guard let listed else { throw DirectoryReadError.incomplete(folder) }
+      let arranged = try await arrange(listed, sort, showsHiddenFiles)
+      guard isStillWanted() else { return }
+      items = arranged
+      selection = Self.matching(selectionWanted, in: items)
       selectionToRestore = nil
       state = .loaded
     } catch is CancellationError {
       return
     } catch {
-      guard current == generation else { return }
+      guard isStillWanted() else { return }
       items = []
       selection = []
       selectionToRestore = nil
@@ -101,7 +158,7 @@ public final class BrowserModel {
   @discardableResult
   public func move(to folder: URL) -> Bool {
     guard !BrowserHistory.isSamePlace(folder, location) else { return false }
-    history.visit(folder, leaving: selectionLeftBehind)
+    history.visit(folder, leaving: selectionWanted)
     prepareToShow(selecting: [])
     return true
   }
@@ -113,7 +170,7 @@ public final class BrowserModel {
   public func moveToEnclosingFolder() -> Bool {
     guard let parent = enclosingFolder else { return false }
     let child = location
-    history.visit(parent, leaving: selectionLeftBehind)
+    history.visit(parent, leaving: selectionWanted)
     prepareToShow(selecting: [child])
     return true
   }
@@ -122,7 +179,7 @@ public final class BrowserModel {
   /// - Returns: Whether the location changed. It does not without history.
   @discardableResult
   public func moveBack() -> Bool {
-    guard let entry = history.goBack(leaving: selectionLeftBehind) else { return false }
+    guard let entry = history.goBack(leaving: selectionWanted) else { return false }
     prepareToShow(selecting: entry.selection)
     return true
   }
@@ -130,7 +187,7 @@ public final class BrowserModel {
   /// Undoes ``moveBack()``.
   @discardableResult
   public func moveForward() -> Bool {
-    guard let entry = history.goForward(leaving: selectionLeftBehind) else { return false }
+    guard let entry = history.goForward(leaving: selectionWanted) else { return false }
     prepareToShow(selecting: entry.selection)
     return true
   }
@@ -184,6 +241,10 @@ public final class BrowserModel {
   /// Empties the list after a move and remembers what to select once
   /// `history.current` has been listed.
   private func prepareToShow(selecting: Set<URL>) {
+    // Retires a load in flight now, not when the next one starts: the caller
+    // may start that a turn later, and the old load must not publish the
+    // folder just left into the list in between.
+    generation += 1
     items = []
     selection = []
     selectionToRestore = selecting

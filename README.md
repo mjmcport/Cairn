@@ -4,7 +4,7 @@ Cairn is a native file manager for the Mac, written in Swift and AppKit. The goa
 
 ## Status
 
-**Phase 1 (Finder-replacement core) is under way.** Phase 0 is complete. The app opens one window, lists a folder, navigates into subfolders, goes back and forward, and keeps several folders open as tabs. It cannot open, copy, move or delete anything yet. This phase built the project skeleton, the test fixtures, continuous integration and a performance baseline. Phase 1 delivers the first build meant for daily use.
+**Phase 1 (Finder-replacement core) is under way.** Phase 0 is complete. The app opens one window, lists a folder, navigates into subfolders, goes back and forward, and keeps several folders open as tabs. A large folder shows its first rows at once and is sorted in the background. It cannot open, copy, move or delete anything yet. This phase built the project skeleton, the test fixtures, continuous integration and a performance baseline. Phase 1 delivers the first build meant for daily use.
 
 To open the app on a folder of your choice after `make build`:
 
@@ -41,7 +41,7 @@ The individual tasks:
 | `make build` | Builds the app |
 | `make test` | Runs the unit tests of every package, the script tests and the project-spec checks |
 | `make uitest` | Runs the end-to-end tests |
-| `make perf` | Runs the performance tests and compares them with `docs/performance/baseline.json` |
+| `make perf` | Runs the performance tests, compares them with `docs/performance/baseline.json` and judges the targets in `docs/performance/targets.json` |
 | `make package` | Builds the Release app, zips it into `build/package` and checks the zip |
 | `make lint` | Checks the governance files and Swift formatting (strict) |
 | `make format` | Reformats every Swift file with the committed `.swift-format` |
