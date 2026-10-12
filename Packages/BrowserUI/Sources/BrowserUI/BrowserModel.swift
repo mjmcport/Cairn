@@ -14,6 +14,15 @@ public final class BrowserModel {
     case failed(String)
   }
 
+  /// What made the model call ``onChange``.
+  public enum Publish: Equatable, Sendable {
+    /// A load: the loading state, a folder's first rows, or its settled list.
+    case load
+    /// A change on disk to the folder already showing. The rows and the
+    /// selection may have changed; where the user is looking has not.
+    case refresh
+  }
+
   /// Back and forward history. `history.current` is the folder being shown.
   public private(set) var history: BrowserHistory
   /// The folder's items after hidden-file filtering and sorting. While a
@@ -30,6 +39,8 @@ public final class BrowserModel {
   /// Called on the main actor whenever the location, items, state or a
   /// restored selection changes.
   public var onChange: (() -> Void)?
+  /// What the latest call of ``onChange`` was for.
+  public private(set) var lastPublish = Publish.load
 
   /// The folder being shown.
   public var location: URL { history.current }
@@ -37,6 +48,8 @@ public final class BrowserModel {
   public var canGoForward: Bool { history.canGoForward }
 
   private let reader: any DirectoryReading
+  /// Nil for a model that never watches its folder.
+  private let watcher: (any FolderWatching)?
   /// Counts loads, so a slow listing of a folder the user has already left
   /// cannot overwrite the current one.
   private var generation = 0
@@ -56,16 +69,54 @@ public final class BrowserModel {
     -> [FileItem]
   private let arrange: Arrange
 
-  public convenience init(location: URL, reader: any DirectoryReading = DirectoryReader()) {
-    self.init(location: location, reader: reader) { items, sort, includingHidden in
+  // MARK: Watching
+  //
+  // While the owner says the browser is on screen, one session watches the
+  // folder being shown and answers each signal with a refresh, one at a
+  // time. A move ends the session and starts the next. A load never
+  // refreshes and a refresh never loads.
+
+  /// Whether the owner has asked for the folder to be watched, and the model
+  /// has a watcher to do it with.
+  private(set) var isWatching = false
+  /// The watch of the folder being shown, while there is one.
+  private var session: WatchSession?
+  private var sessionsStarted = 0
+  /// Whether a signal arrived while a load was in flight. The load pays it
+  /// with one refresh when it settles.
+  private var owesRefresh = false
+  /// Called each time a session has finished with every signal it had,
+  /// whatever it did with them. Tests wait on it in place of a clock.
+  var onSignalsAnswered: (() -> Void)?
+  /// Whether the session has a signal it has not finished with.
+  var isAnsweringSignals: Bool { session?.isAnswering ?? false }
+
+  /// A browser on the real file system, which lists its folder and, while
+  /// it is told to, watches it.
+  public convenience init(location: URL) {
+    self.init(location: location, reader: DirectoryReader(), watcher: FolderWatcher())
+  }
+
+  /// A browser that lists through `reader`. It watches nothing unless it is
+  /// also given a watcher, so a test with a stub reader can never watch a
+  /// real folder by leaving the watcher out.
+  public convenience init(
+    location: URL, reader: any DirectoryReading, watcher: (any FolderWatching)? = nil
+  ) {
+    self.init(location: location, reader: reader, watcher: watcher) {
+      items, sort, includingHidden in
       try await sort.arranged(items, includingHidden: includingHidden)
     }
   }
 
   /// - Parameter arrange: Tests replace it to hold a load while it sorts.
-  init(location: URL, reader: any DirectoryReading, arrange: @escaping Arrange) {
+  init(
+    location: URL, reader: any DirectoryReading, watcher: (any FolderWatching)? = nil,
+    arrange: @escaping Arrange
+  ) {
     history = BrowserHistory(current: location)
     self.reader = reader
+    self.watcher = watcher
     self.arrange = arrange
   }
 
@@ -82,6 +133,15 @@ public final class BrowserModel {
   /// Reloading the folder already showing keeps its rows until the sorted
   /// list replaces them, and keeps the selection of items that still exist.
   public func load() async {
+    // Declared first, so it runs last: the signpost intervals have ended by
+    // the time a signal that arrived during this load is answered.
+    var settled = false
+    defer {
+      if settled, owesRefresh, let session {
+        owesRefresh = false
+        signalArrived(inSession: session.id)
+      }
+    }
     let signposter = Log.signposter
     let wholeLoad = signposter.beginInterval(Self.loadSignpostName)
     var firstRows: OSSignpostIntervalState? = signposter.beginInterval(Self.firstRowsSignpostName)
@@ -99,7 +159,9 @@ public final class BrowserModel {
     let current = generation
     let folder = location
     state = .loading
-    onChange?()
+    // This listing starts after every signal so far, so it answers them all.
+    owesRefresh = false
+    publish(.load)
 
     // After every wait, a load that was superseded or cancelled stops
     // without publishing.
@@ -116,7 +178,7 @@ public final class BrowserModel {
           let rows = first.visible(includingHidden: showsHiddenFiles)
           guard !rows.isEmpty else { continue }
           items = rows
-          onChange?()
+          publish(.load)
           endFirstRows()
         case .allItems(let all):
           listed = all
@@ -140,7 +202,133 @@ public final class BrowserModel {
       selectionToRestore = nil
       state = .failed(error.localizedDescription)
     }
+    publish(.load)
+    settled = true
+  }
+
+  private func publish(_ kind: Publish) {
+    lastPublish = kind
     onChange?()
+  }
+
+  // MARK: Live updates
+
+  /// Watches the folder being shown, and each folder the browser moves to,
+  /// until ``stopWatching()``. The owner calls this while the browser is on
+  /// screen. Every start is followed by one refresh, which brings up to date
+  /// a list that nothing was watching. Does nothing in a model without a
+  /// watcher, or one that is already watching.
+  public func startWatching() {
+    guard watcher != nil, !isWatching else { return }
+    isWatching = true
+    startSession()
+  }
+
+  /// Stops watching. A refresh under way publishes nothing.
+  public func stopWatching() {
+    guard isWatching else { return }
+    isWatching = false
+    endSession()
+  }
+
+  /// Ends the session in hand and, while watching, starts one for the folder
+  /// now being shown. The folder's signals are asked for before this
+  /// returns, so a command starts the new watch as it arrives.
+  private func startSession() {
+    endSession()
+    guard isWatching, let watcher else { return }
+    sessionsStarted += 1
+    let id = sessionsStarted
+    let signals = watcher.signals(for: location)
+    session = WatchSession(
+      id: id,
+      // The task does not hold the model: when the model goes away the
+      // session goes with it and ends the task, which stops the watch.
+      forwarder: Task { [weak self] in
+        for await _ in signals {
+          self?.signalArrived(inSession: id)
+        }
+      })
+  }
+
+  private func endSession() {
+    session?.end()
+    session = nil
+    owesRefresh = false
+  }
+
+  /// One signal for the session: from the watcher, or from a load paying
+  /// what it owed. Signals that arrive while the session is busy are answered
+  /// together, by exactly one more refresh.
+  private func signalArrived(inSession id: Int) {
+    guard let session, session.id == id else { return }
+    session.hasSignal = true
+    guard !session.isAnswering else { return }
+    session.answering = Task { await self.answerSignals(of: session) }
+  }
+
+  /// Answers signals one at a time until the session has none: each is set
+  /// aside during a load, and otherwise answered with a refresh.
+  private func answerSignals(of session: WatchSession) async {
+    while session === self.session, session.hasSignal {
+      session.hasSignal = false
+      if state == .loading {
+        // The first rows of a load are never replaced by a refresh. The load
+        // answers this signal when it settles.
+        owesRefresh = true
+      } else {
+        await refresh(inSession: session.id)
+      }
+    }
+    session.answering = nil
+    onSignalsAnswered?()
+  }
+
+  /// Lists the folder again and publishes the result only when the visible
+  /// rows changed, or when the folder could not be listed before and can be
+  /// now, or the other way round. The whole listing, the filter, the sort and
+  /// the comparison run off the main actor. Never shows the loading state,
+  /// first rows or unsorted rows.
+  ///
+  /// A refresh reads the load counter and never changes it: a move or a load
+  /// retires a refresh in flight, and a refresh can never retire a load.
+  private func refresh(inSession id: Int) async {
+    let current = generation
+    let folder = location
+    // After every wait, a refresh that was superseded by a move or a load,
+    // or whose watch has stopped, stops without publishing.
+    func isStillWanted() -> Bool {
+      current == generation && session?.id == id && !Task.isCancelled
+    }
+
+    do {
+      let listed = try await reader.items(in: folder)
+      guard isStillWanted() else { return }
+      let arranged = try await arrange(listed, sort, showsHiddenFiles)
+      guard isStillWanted() else { return }
+      let changed = await arranged.differs(from: items)
+      guard isStillWanted() else { return }
+      guard changed || state != .loaded else { return }
+      items = arranged
+      // From the selection as it is now: one the user made while the folder
+      // was being listed is the one kept.
+      selection = Self.matching(selectionWanted, in: items)
+      selectionToRestore = nil
+      state = .loaded
+    } catch is CancellationError {
+      return
+    } catch {
+      guard isStillWanted() else { return }
+      // A folder that went away is a refresh whose listing fails. The same
+      // failure seen again is not news.
+      let failure = State.failed(error.localizedDescription)
+      guard state != failure else { return }
+      items = []
+      selection = []
+      selectionToRestore = nil
+      state = failure
+    }
+    publish(.refresh)
   }
 
   // MARK: Moves
@@ -248,6 +436,8 @@ public final class BrowserModel {
     items = []
     selection = []
     selectionToRestore = selecting
+    // The watch moves with the browser, as the command arrives.
+    startSession()
   }
 
   /// The URLs of `items` that `wanted` names. A selection belongs to one
@@ -258,5 +448,36 @@ public final class BrowserModel {
     guard !wanted.isEmpty else { return [] }
     let names = Set(wanted.map(\.lastPathComponent))
     return Set(items.filter { names.contains($0.name) }.map(\.url))
+  }
+}
+
+/// One watch of one folder: the task that passes the watcher's signals on,
+/// and what the model has yet to do about them. The task ends when the
+/// session goes away, and with it the watcher's stream, which stops the watch.
+@MainActor
+private final class WatchSession {
+  let id: Int
+  private let forwarder: Task<Void, Never>
+  /// Whether a signal has arrived that no refresh has started to answer.
+  var hasSignal = false
+  /// The task answering signals, while there are any.
+  var answering: Task<Void, Never>?
+  var isAnswering: Bool { answering != nil }
+
+  init(id: Int, forwarder: Task<Void, Never>) {
+    self.id = id
+    self.forwarder = forwarder
+  }
+
+  /// Stops the watch now, without waiting for a refresh under way to notice
+  /// it is no longer wanted. That refresh stops at its next check;
+  /// cancelling it also stops its listing.
+  func end() {
+    forwarder.cancel()
+    answering?.cancel()
+  }
+
+  deinit {
+    forwarder.cancel()
   }
 }

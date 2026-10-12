@@ -94,7 +94,7 @@ final class TabsTests: XCTestCase {
   private static let tabCommands: Set<String> = ["Show Next Tab", "Show Previous Tab"]
 
   @MainActor
-  func testTabsKeepTheirOwnFolderHistoryAndSelection() {
+  func testTabsKeepTheirOwnFolderHistoryAndSelection() throws {
     let (app, table, window) = launch()
     let rootName = tree.root.lastPathComponent
     let back = app.toolbars.buttons.matching(
@@ -120,9 +120,17 @@ final class TabsTests: XCTestCase {
     XCTAssertEqual(window.title, "Sub")
     XCTAssertTrue(back.isEnabled)
 
+    // While tab 1 is not showing, another process, this test runner, adds a
+    // file to its folder. No one is watching a tab that is not on screen.
+    try Data().write(to: tree.url("arrived.txt"), options: .withoutOverwriting)
+
     // Control-Tab wraps to tab 1, which is where it was left, with no history.
     app.typeKey(.tab, modifierFlags: .control)
     XCTAssertTrue(table.staticTexts["alpha.txt"].waitForExistence(timeout: 10))
+    // Shown again, the tab brings its list up to date by itself (Phase 1A step 4).
+    XCTAssertTrue(
+      table.staticTexts["arrived.txt"].waitForExistence(timeout: 10),
+      "The file added while the tab was away did not appear")
     XCTAssertEqual(showingTabs(app), [true, false])
     XCTAssertFalse(back.isEnabled)
     XCTAssertEqual(window.title, rootName)

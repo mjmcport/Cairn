@@ -33,15 +33,16 @@ Twelve steps that produce almost nothing you can see, and everything the visible
 | 1 | [Remembering the way back](phase-1-step-01-navigation-history.md) | Checking and then acting leaves a gap; close it |
 | 2 | [Several places at once](phase-1-step-02-tabs.md) | Keep the original instead of saving and restoring; "which window?" |
 | 3 | [The first rows, at once](phase-1-step-03-fast-first-rows.md) | How a wait feels; asking "is this still wanted?" after every pause |
+| 4 | [A list that keeps up](phase-1-step-04-live-updates.md) | A new source of change must fit the old rules; make the other system share ownership |
 
 ## Ideas that keep coming back
 
 A few lessons appear in step after step. Watching one recur is the best way to learn it.
 
 - **A check must be able to fail.** Steps 1, 3, 6, 9 and 12 of Phase 0, and the follow-up.
-- **Keep slow work away from the interface.** Phase 0 steps 5 and 6; Phase 1 step 3.
-- **A late answer to an old question.** Phase 0 step 5; Phase 1 steps 1 and 3.
-- **Measure, and record the conditions.** Phase 0 steps 7 and 9; Phase 1 step 3.
+- **Keep slow work away from the interface.** Phase 0 steps 5 and 6; Phase 1 steps 3 and 4.
+- **A late answer to an old question.** Phase 0 step 5; Phase 1 steps 1, 3 and 4.
+- **Measure, and record the conditions.** Phase 0 steps 7 and 9; Phase 1 steps 3 and 4.
 - **Say plainly what is not done.** Nearly every page.
 - **It passed here, not there.** The follow-up; Phase 1 steps 1 and 2.
 

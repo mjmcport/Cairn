@@ -785,6 +785,229 @@ import Testing
     #expect(await redraws(opening: big, reader: reader) == 3)
   }
 
+  // MARK: A refresh
+
+  /// A browser on `big`, which holds plain files with these names, loaded and
+  /// watching. The reader and the watcher are stubs.
+  private func watchedBrowser(holding names: [String], gate: Gate? = nil) async throws -> (
+    controller: BrowserViewController, table: NSTableView, reader: StubReader,
+    watcher: StubWatcher, answered: AnsweredSignals
+  ) {
+    let reader = StubReader(
+      results: [big: names.map { file($0, in: big) }, small: [file("only.txt", in: small)]],
+      gates: gate.map { [big: $0] } ?? [:])
+    let watcher = StubWatcher()
+    let controller = BrowserViewController(location: big, reader: reader, watcher: watcher)
+    let table = try #require(Self.firstSubview(of: NSTableView.self, in: controller.view))
+    let answered = AnsweredSignals(of: controller.model)
+    await gate?.open()
+    await controller.loadTask?.value
+    controller.startWatching()
+    return (controller, table, reader, watcher, answered)
+  }
+
+  /// Changes what `big` holds and sends the signal a watch would, then waits
+  /// for the browser to have dealt with it.
+  private func refresh(
+    _ reader: StubReader, to names: [String], _ watcher: StubWatcher, _ answered: AnsweredSignals
+  ) async {
+    let before = answered.count
+    reader.changed.update { $0[big] = .items(names.map { file($0, in: big) }) }
+    await watcher.send(to: big)
+    await answered.wait(for: before + 1)
+  }
+
+  private func status(of controller: BrowserViewController) throws -> NSTextField {
+    try #require(
+      controller.view.subviews.first { $0.accessibilityIdentifier() == "browser-status" }
+        as? NSTextField)
+  }
+
+  @Test func aRefreshThatAddsARowAboveTheSelectedOneKeepsTheSameItemSelected() async throws {
+    let (controller, table, reader, watcher, answered) = try await watchedBrowser(
+      holding: ["b", "c"])
+    table.selectRowIndexes([1], byExtendingSelection: false)
+    let selected = controller.model.selection
+    try #require(selected.map(\.lastPathComponent) == ["c"])
+
+    var selectionChanges = 0
+    let observer = NotificationCenter.default.addObserver(
+      forName: NSTableView.selectionDidChangeNotification, object: table, queue: nil
+    ) { _ in
+      MainActor.assumeIsolated { selectionChanges += 1 }
+    }
+    defer { NotificationCenter.default.removeObserver(observer) }
+
+    await refresh(reader, to: ["a", "b", "c"], watcher, answered)
+    #expect(rowNames(of: table) == ["a", "b", "c"])
+    #expect(table.selectedRowIndexes == [2])
+    // The table was told once, and the model's selection is the one it had.
+    #expect(selectionChanges == 1)
+    #expect(controller.model.selection == selected)
+  }
+
+  @Test func aRefreshKeepsTheScrollOffsetWithTheSelectedRowOutOfViewAndWithNothingSelected()
+    async throws
+  {
+    for selectingTheFirstRow in [true, false] {
+      let names = numberedNames(400)
+      let (controller, table, reader, watcher, answered) = try await watchedBrowser(
+        holding: names)
+      let window = NSWindow(contentViewController: controller)
+      window.layoutIfNeeded()
+      let clipView = try #require(table.enclosingScrollView?.contentView)
+      if selectingTheFirstRow {
+        table.selectRowIndexes([0], byExtendingSelection: false)
+      }
+
+      table.scrollRowToVisible(300)
+      let scrolled = clipView.bounds.origin
+      try #require(scrolled.y > 0)
+      try #require(!table.rows(in: table.visibleRect).contains(0))
+
+      // Another row changes: the last file is gone.
+      await refresh(reader, to: Array(names.dropLast()), watcher, answered)
+      #expect(table.numberOfRows == 399)
+      #expect(clipView.bounds.origin == scrolled)
+      #expect(table.selectedRowIndexes == (selectingTheFirstRow ? [0] : []))
+    }
+  }
+
+  @Test func keyboardFocusStaysWhereItIsThroughARefresh() async throws {
+    for focusInTheList in [false, true] {
+      let (controller, table, reader, watcher, answered) = try await watchedBrowser(
+        holding: ["a", "b"])
+      let (window, other) = window(holding: controller)
+      let focused: NSResponder = focusInTheList ? table : other
+      try #require(window.makeFirstResponder(focused))
+
+      await refresh(reader, to: ["a", "b", "c"], watcher, answered)
+      try #require(table.numberOfRows == 3)
+      #expect(window.firstResponder === focused)
+    }
+  }
+
+  @Test func aRefreshThatChangesNothingDoesNotReloadTheTable() async throws {
+    let (controller, table, reader, watcher, answered) = try await watchedBrowser(
+      holding: ["a", "b"])
+    var redraws = 0
+    let redraw = controller.model.onChange
+    controller.model.onChange = {
+      redraws += 1
+      redraw?()
+    }
+
+    await refresh(reader, to: ["a", "b"], watcher, answered)
+    #expect(reader.listings(of: big) == 2)
+    #expect(redraws == 0)
+    #expect(table.numberOfRows == 2)
+  }
+
+  @Test func theStatusTextFollowsAFolderThatIsEmptiedAndFilledByRefreshes() async throws {
+    let (controller, table, reader, watcher, answered) = try await watchedBrowser(holding: [])
+    let status = try status(of: controller)
+    var hiddenAtEachRedraw: [Bool] = []
+    let redraw = controller.model.onChange
+    controller.model.onChange = {
+      redraw?()
+      hiddenAtEachRedraw.append(status.isHidden)
+    }
+    try #require(!status.isHidden && status.stringValue == "This folder is empty.")
+
+    // Still empty: nothing is redrawn, so the text was never hidden.
+    await refresh(reader, to: [], watcher, answered)
+    #expect(hiddenAtEachRedraw == [])
+    #expect(!status.isHidden)
+
+    await refresh(reader, to: ["a"], watcher, answered)
+    #expect(hiddenAtEachRedraw == [true])
+    #expect(table.numberOfRows == 1)
+
+    await refresh(reader, to: [], watcher, answered)
+    #expect(hiddenAtEachRedraw == [true, false])
+    #expect(status.stringValue == "This folder is empty.")
+    #expect(table.numberOfRows == 0)
+  }
+
+  @Test func aFolderThatFailsOnARefreshShowsNoRowsAndTheReason() async throws {
+    let (controller, table, reader, watcher, answered) = try await watchedBrowser(
+      holding: ["a", "b"])
+    let status = try status(of: controller)
+    try #require(status.isHidden)
+
+    reader.changed.update { $0[big] = .missing }
+    await watcher.send(.folderChanged, to: big)
+    await answered.wait(for: 1)
+    #expect(table.numberOfRows == 0)
+    #expect(!status.isHidden)
+    #expect(status.stringValue == CocoaError(.fileReadNoSuchFile).localizedDescription)
+  }
+
+  @Test func openSentWhileARefreshIsHeldMovesToTheFolderAndEndsLoaded() async throws {
+    let sub = big.appending(path: "Sub", directoryHint: .isDirectory)
+    let gate = Gate()
+    var reader = StubReader(
+      results: [big: [FileItem(url: sub, kind: .directory)], sub: [file("inner.txt", in: sub)]],
+      gates: [big: gate])
+    reader.results[small] = []
+    let watcher = StubWatcher()
+    let controller = BrowserViewController(location: big, reader: reader, watcher: watcher)
+    let table = try #require(Self.firstSubview(of: NSTableView.self, in: controller.view))
+    let answered = AnsweredSignals(of: controller.model)
+    await gate.open()
+    await controller.loadTask?.value
+    controller.startWatching()
+
+    await gate.close()
+    await watcher.send(to: big)
+    await gate.waitUntilReached()
+    table.selectRowIndexes([0], byExtendingSelection: false)
+    controller.openSelection(nil)
+    await controller.loadTask?.value
+    #expect(controller.model.location == sub)
+    #expect(controller.model.state == .loaded)
+    #expect(rowNames(of: table) == ["inner.txt"])
+    #expect(watcher.watched == [sub])
+
+    // The held refresh of the folder that was left changes nothing.
+    await gate.open()
+    await answered.wait(for: 1)
+    #expect(controller.model.location == sub)
+    #expect(rowNames(of: table) == ["inner.txt"])
+  }
+
+  @Test func backSentTwiceWhileARefreshIsHeldEndsOnThePreviousFolderLoaded() async throws {
+    let gate = Gate()
+    let reader = StubReader(
+      results: [small: [file("only.txt", in: small)], big: [file("a", in: big)]],
+      gates: [big: gate])
+    let watcher = StubWatcher()
+    let controller = BrowserViewController(location: small, reader: reader, watcher: watcher)
+    let table = try #require(Self.firstSubview(of: NSTableView.self, in: controller.view))
+    let answered = AnsweredSignals(of: controller.model)
+    await controller.loadTask?.value
+    controller.startWatching()
+    await gate.open()
+    await controller.model.navigate(to: big)
+    try #require(controller.model.canGoBack)
+
+    await gate.close()
+    await watcher.send(to: big)
+    await gate.waitUntilReached()
+    // No await between the two: the first one's task has not started.
+    controller.goBack(nil)
+    controller.goBack(nil)
+    await controller.loadTask?.value
+    #expect(controller.model.state == .loaded)
+    #expect(controller.model.location == small)
+    #expect(rowNames(of: table) == ["only.txt"])
+
+    await gate.open()
+    await answered.wait(for: 1)
+    #expect(controller.model.location == small)
+    #expect(rowNames(of: table) == ["only.txt"])
+  }
+
   private static func firstSubview<View: NSView>(of type: View.Type, in view: NSView) -> View? {
     if let match = view as? View { return match }
     for subview in view.subviews {

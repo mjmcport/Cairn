@@ -105,3 +105,23 @@ extension Sequence<FileItem> {
     includingHidden ? Array(self) : filter { !$0.isHidden }
   }
 }
+
+extension [FileItem] {
+  /// Whether this listing differs from another: the two are the same when
+  /// they hold equal items in the same order, so one item more or fewer, a
+  /// different order, or an item whose size or modified date changed each
+  /// make them differ.
+  ///
+  /// Never runs on the caller's actor, so two large listings can be compared
+  /// from the main actor without holding it.
+  public func differs(from other: [FileItem]) async -> Bool {
+    await differs(from: other, onStart: {})
+  }
+
+  /// - Parameter onStart: Called before anything is compared. Tests use it
+  ///   to see where the work runs.
+  func differs(from other: [FileItem], onStart: @Sendable () -> Void) async -> Bool {
+    onStart()
+    return self != other
+  }
+}

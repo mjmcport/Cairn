@@ -88,7 +88,7 @@ Three macOS versions matter: the CI runner is macOS 26 (runner label `macos-26`)
 
 ## Status
 
-Phase 0 is complete (12 steps, one commit each). Its plans are in `plans/` and its lessons in `docs/solutions/`. The Phase 0 follow-up (`plans/phase-0-follow-up.md`) closes it out. Phase 1 (Finder-replacement core) is under way, on branches and pull requests. Its first milestone is planned in `plans/phase-1a-browse.md`, which also holds the Phase 1 exit requirements. Milestone 1A step 1 (navigation history, `plans/phase-1a-step-01-navigation-history.md`), step 2 (tabs, `plans/phase-1a-step-02-tabs.md`) and step 3 (fast first rows, `plans/phase-1a-step-03-fast-first-rows.md`) are done. Step 4 is next.
+Phase 0 is complete (12 steps, one commit each). Its plans are in `plans/` and its lessons in `docs/solutions/`. The Phase 0 follow-up (`plans/phase-0-follow-up.md`) closes it out. Phase 1 (Finder-replacement core) is under way, on branches and pull requests. Its first milestone is planned in `plans/phase-1a-browse.md`, which also holds the Phase 1 exit requirements. Milestone 1A step 1 (navigation history, `plans/phase-1a-step-01-navigation-history.md`), step 2 (tabs, `plans/phase-1a-step-02-tabs.md`), step 3 (fast first rows, `plans/phase-1a-step-03-fast-first-rows.md`) and step 4 (live updates, `plans/phase-1a-step-04-live-updates.md`) are done. Step 5 is next. The VoiceOver checks of step 4 were skipped and are still open (`docs/solutions/2026-10-11-live-updates-notes.md`).
 
 ## Open items
 

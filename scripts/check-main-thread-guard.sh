@@ -11,7 +11,7 @@
 
 root="${CAIRN_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}"
 exempt_packages="TestSupport"   # builds fixtures on the test's own thread
-file_system_calls='FileManager\.default\.(enumerator|contentsOfDirectory|createDirectory|createFile|removeItem|copyItem|moveItem|trashItem|fileExists|attributesOfItem|setAttributes|createSymbolicLink|linkItem|subpaths)|\.resourceValues\(forKeys|\.setResourceValues\(|Data\(contentsOf:|String\(contentsOf:|\.write\(to:|FileHandle\(for|[^A-Za-z_.](opendir|readdir|lstat|stat|getxattr|setxattr|listxattr|removexattr|copyfile|clonefile|rename|unlink|rmdir|mkdir|symlink|readlink|chmod|chflags|getattrlist|getattrlistbulk|fts_open)\('
+file_system_calls='FileManager\.default\.(enumerator|contentsOfDirectory|createDirectory|createFile|removeItem|copyItem|moveItem|trashItem|fileExists|attributesOfItem|setAttributes|createSymbolicLink|linkItem|subpaths)|\.resourceValues\(forKeys|\.setResourceValues\(|Data\(contentsOf:|String\(contentsOf:|\.write\(to:|FileHandle\(for|[^A-Za-z_.](FSEventStreamCreate|realpath|opendir|readdir|lstat|stat|getxattr|setxattr|listxattr|removexattr|copyfile|clonefile|rename|unlink|rmdir|mkdir|symlink|readlink|chmod|chflags|getattrlist|getattrlistbulk|fts_open)\('
 failures=0
 
 for directory in "$root"/Packages/*/; do

@@ -12,7 +12,7 @@ BrowserUI       Panes, the file list, models that drive the views
     ├── FileOperations     Copy, move, trash, rename, undo        (stub)
     ├── FileMetadata       Sizes, dates, tags, ACLs, cloud state  (stub)
     │         │
-    └── FileSystemCore     Items, listing, sorting, logging, the main-thread guard
+    └── FileSystemCore     Items, listing, sorting, watching, logging, the main-thread guard
 
 TestSupport     Fixture-tree builder; used by every test target, depends on nothing
 ```
@@ -25,7 +25,7 @@ An arrow means "depends on". `BrowserUI` also uses `FileSystemCore` directly. No
 | `BrowserUI` | `PaneViewController` (one pane: its tabs, the window's title and keyboard focus), `TabList` (the order of a pane's tabs and which one is showing; no AppKit in it), `TabBarView` (the row of tabs, their close buttons and the New Tab button), `BrowserModel` (state of one browser), `BrowserHistory` (its back and forward places, with the selection left at each), `BrowserViewController` (the list; one per tab), `BrowserToolbar` (the Back and Forward buttons), `AccessibilityElement`, `InitialLocation` | AppKit, the three core packages |
 | `FileOperations` | `FileOperation` today; the operation engine in Phase 1 | Foundation, FileSystemCore |
 | `FileMetadata` | `MetadataGroup` today; Get Info readers in Phase 1 | Foundation, FileSystemCore |
-| `FileSystemCore` | `FileItem`, `DirectoryReader`, `FileItemSort`, `MainThreadGuard`, `Log`, `LocalDiagnosticsStore` | Foundation, os |
+| `FileSystemCore` | `FileItem`, `DirectoryReader`, `FileItemSort`, `FolderWatcher` (one FSEvents stream per watched folder), `MainThreadGuard`, `Log`, `LocalDiagnosticsStore` | Foundation, os, CoreServices |
 | `TestSupport` | `FixtureTree`, `FixtureNode`, `FixtureNames`, `TemporaryDirectory` | Foundation |
 
 ## How a folder gets on screen
@@ -40,9 +40,23 @@ An arrow means "depends on". `BrowserUI` also uses `FileSystemCore` directly. No
 
 A load is wrapped in two signpost intervals. `FirstRows` runs from the request until the list has rows: the first rows of a large folder, or the sorted list of a smaller one. The performance test measures it. `LoadFolder` covers the whole load, until the sorted list has been published.
 
+## How a change on disk reaches the list
+
+1. While a pane's view is on screen, its showing tab watches the folder it shows. The pane tells that browser's model to start, and tells every other browser to stop; a move starts the watch of the new folder as the command arrives, where the load in flight is retired.
+2. `FolderWatcher.signals(for:)` returns a stream of "look again" signals. It resolves the folder with `realpath`, because FSEvents reports real paths, and starts one FSEvents stream for it in a task that never runs on the main actor, with events delivered on a private queue. The stream is created with `WatchRoot` and without `FileEvents`, so an event names a folder in which something changed, and a change to the watched folder itself is flagged.
+3. FSEvents collects events for up to 0.3 s and delivers them in one callback. `FolderWatcher.eventConcernsFolder(path:flags:folder:)` keeps a callback when one of its events names the folder, names a direct subfolder, or carries the root-changed or must-scan flag. A callback that is kept becomes one signal: the watch is live, the contents changed, or the folder itself changed. The model answers all three the same way.
+4. The model answers a signal with a refresh: `DirectoryReader.items(in:)` for the whole folder, the same filter and sort as a load, and `differs(from:)` against the rows on screen, all off the main actor. It publishes only when the visible rows changed, or when a folder that could not be listed now can. It never sets the loading state and never shows first rows.
+5. Signals are answered one at a time. Any number that arrive during a refresh are answered by one more. A signal that arrives during a load is set aside, and the load answers it with one refresh when it settles. A load that starts clears what was set aside, because its listing begins after every signal so far.
+6. A refresh reads the load counter and never changes it. A move or a load retires a refresh in flight, and a refresh cannot retire a load. A refresh also stops when its watch has ended.
+7. The model says whether a publish was a load or a refresh. For a refresh the controller reloads the table and puts the selection back on the same items by name, and does not scroll to it, so the scroll offset and keyboard focus stay where they were.
+8. A folder that is deleted or renamed away is a refresh whose listing fails: the rows are cleared and the reason is shown, as for a failed load. The watch stays, so a folder that appears again at that path is listed.
+9. The watch stops when the tab is hidden or closed, when the pane's view leaves the screen, and when the model goes away. Ending the signal stream stops the FSEvents stream. Every start of a watch sends a "live" signal, so a tab that comes back on screen brings its list up to date.
+
+A change that another computer makes on a network share is not reported by FSEvents; those locations are handled later in Phase 1.
+
 ## Tabs
 
-A pane keeps every tab's browser alive as a child view controller, so a tab that is not showing keeps its folder, history, selection and scroll position, and finishes a listing it had started. Closing a tab cancels its listing. Closing the last tab closes the window.
+A pane keeps every tab's browser alive as a child view controller, so a tab that is not showing keeps its folder, history, selection and scroll position, and finishes a listing it had started. Only the showing tab is watched for changes on disk, and only while the pane is on screen; a tab that is shown again refreshes its list as its watch starts. Closing a tab cancels its listing and stops its watch. Closing the last tab closes the window.
 
 - `TabList` holds the rules: a new tab goes last and is shown, closing the showing tab shows its right neighbour or else its left, and next and previous wrap around. The tab bar is hidden while there is one tab.
 - A tab command (`newTab`, `closeTab`, `showNextTab`, `showPreviousTab`) changes the tab list as it arrives and brings the window in line before it returns. Only a browser's listing runs in a task, so the same command sent twice in a row does what two commands should.
@@ -54,7 +68,7 @@ A pane keeps every tab's browser alive as a child view controller, so a tab that
 
 | Rule | Enforced by |
 | --- | --- |
-| No file-system call on the main thread | `MainThreadGuard.assertOffMainThread()` at each entry point; unit tests prove each guard fires; `scripts/check-main-thread-guard.sh` |
+| No file-system call on the main thread | `MainThreadGuard.assertOffMainThread()` at each entry point; unit tests prove each guard fires; `scripts/check-main-thread-guard.sh`, whose list of calls includes `FSEventStreamCreate` and `realpath` |
 | Core packages never import a UI framework | Package manifests; `scripts/check-appkit-boundary.sh` |
 | No networking code | `scripts/check-no-network.sh` |
 | Every control has an identifier and a spoken label | `AccessibilityElement` and `apply(_:)`; `scripts/check-accessibility.sh`; the accessibility audit in the UI suite |
@@ -90,4 +104,4 @@ Each decision that shaped this structure has a record in [`docs/adr`](docs/adr):
 
 ## What is not here yet
 
-Phase 0 is a skeleton. The sidebar, icon and column views, live updates, Get Info, file operations, undo, state restoration, signing and updates all arrive in Phase 1. The plan is the Claude Doc "Mac file manager implementation plan".
+Phase 0 is a skeleton. The sidebar, icon and column views, Get Info, file operations, undo, state restoration, signing and updates all arrive in Phase 1. The plan is the Claude Doc "Mac file manager implementation plan".

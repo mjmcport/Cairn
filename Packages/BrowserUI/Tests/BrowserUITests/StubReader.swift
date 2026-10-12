@@ -15,8 +15,26 @@ struct StubReader: DirectoryReading {
   var endingEarly: Set<URL> = []
   /// The folders whose listing found its consumer cancelled and stopped.
   let cancelledListings = Recorded<[URL]>([])
+  /// Every folder a listing was asked for, in order, so a test can count them.
+  let listed = Recorded<[URL]>([])
+  /// What a folder holds from now on, in place of `results`, for a test
+  /// that changes a folder after it has been listed.
+  let changed = Recorded<[URL: Contents]>([:])
+
+  /// What a folder that changed now holds.
+  enum Contents: Sendable {
+    case items([FileItem])
+    /// The folder is gone: listing it fails.
+    case missing
+  }
+
+  /// How many times `directory` was asked for.
+  func listings(of directory: URL) -> Int {
+    listed.value.count { $0 == directory }
+  }
 
   func listing(in directory: URL) -> AsyncThrowingStream<DirectoryListingEvent, any Error> {
+    listed.update { $0.append(directory) }
     let asked = Counter()
     // The stream asks for each event as its consumer does, so a gate holds
     // the consumer where the test expects it.
@@ -39,7 +57,10 @@ struct StubReader: DirectoryReading {
       default:
         return nil
       }
-      guard let items = results[directory] else {
+      // Read when the listing is handed over, so a change made while the
+      // listing was held at a gate is in it.
+      let contents = changed.value[directory] ?? results[directory].map(Contents.items) ?? .missing
+      guard case .items(let items) = contents else {
         throw CocoaError(.fileReadNoSuchFile)
       }
       return .allItems(items)
@@ -81,6 +102,11 @@ final class Recorded<Value: Sendable>: @unchecked Sendable {
   var value: Value {
     get { lock.withLock { stored } }
     set { lock.withLock { stored = newValue } }
+  }
+
+  /// Changes the value in one step, for a value written from several threads.
+  func update(_ change: (inout Value) -> Void) {
+    lock.withLock { change(&stored) }
   }
 }
 

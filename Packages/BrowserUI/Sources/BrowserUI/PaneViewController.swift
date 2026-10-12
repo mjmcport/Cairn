@@ -10,6 +10,10 @@ import FileSystemCore
 /// showing browser's view is in the window. A browser's view lists its folder
 /// when it loads, so a tab that has never been shown has listed nothing.
 ///
+/// Only the showing tab watches its folder for changes, and only while the
+/// pane is on screen. A tab that comes back on screen brings its list up to
+/// date as its watch starts.
+///
 /// The pane owns what a browser cannot know about: the window's title,
 /// keyboard focus after the showing tab changes, and the tab bar. The Go
 /// commands still travel the responder chain to a browser; the pane offers
@@ -27,13 +31,27 @@ public final class PaneViewController: NSViewController {
   private var topAtPaneTop: NSLayoutConstraint?
   /// Every tab lists through the same reader.
   private let reader: any DirectoryReading
+  /// Every tab watches through the same watcher. Nil for a pane whose tabs
+  /// watch nothing.
+  private let watcher: (any FolderWatching)?
+  /// Whether AppKit has said the pane's view is on screen.
+  private var isOnScreen = false
 
   /// The browser of the tab that is showing.
   public var showingBrowser: BrowserViewController { tabs.showing }
 
-  public init(location: URL, reader: any DirectoryReading = DirectoryReader()) {
+  /// A pane on the real file system, whose showing tab follows changes made
+  /// elsewhere.
+  public convenience init(location: URL) {
+    self.init(location: location, reader: DirectoryReader(), watcher: FolderWatcher())
+  }
+
+  /// A pane whose tabs list through `reader`. They watch nothing unless the
+  /// pane is also given a watcher.
+  public init(location: URL, reader: any DirectoryReading, watcher: (any FolderWatching)? = nil) {
     self.reader = reader
-    let browser = BrowserViewController(location: location, reader: reader)
+    self.watcher = watcher
+    let browser = BrowserViewController(location: location, reader: reader, watcher: watcher)
     tabs = TabList(browser)
     super.init(nibName: nil, bundle: nil)
     adopt(browser)
@@ -77,6 +95,14 @@ public final class PaneViewController: NSViewController {
     updateTitle()
     showingBrowser.focusList()
     view.window?.validateToolbarItems()
+    isOnScreen = true
+    updateWatching()
+  }
+
+  public override func viewDidDisappear() {
+    super.viewDidDisappear()
+    isOnScreen = false
+    updateWatching()
   }
 
   // MARK: Actions
@@ -90,7 +116,8 @@ public final class PaneViewController: NSViewController {
   @objc public func newTab(_ sender: Any?) {
     // Read as the command arrives: the current tab has already made any move
     // whose listing has yet to start.
-    let browser = BrowserViewController(location: showingBrowser.location, reader: reader)
+    let browser = BrowserViewController(
+      location: showingBrowser.location, reader: reader, watcher: watcher)
     adopt(browser)
     tabs.add(browser)
     tabsDidChange()
@@ -145,6 +172,7 @@ public final class PaneViewController: NSViewController {
       view.window?.performClose(nil)
     case .closed:
       browser.cancelLoad()
+      browser.stopWatching()
       browser.onTitleChange = nil
       if browser.isViewLoaded {
         browser.view.removeFromSuperview()
@@ -197,6 +225,21 @@ public final class PaneViewController: NSViewController {
     updateTabBar()
     updateTitle()
     view.window?.validateToolbarItems()
+    updateWatching()
+  }
+
+  /// Brings the browsers in line with who should be watching: the showing
+  /// tab while the pane is on screen, and no other. Only the pane knows
+  /// which tab is showing, as with the window's title and keyboard focus.
+  private func updateWatching() {
+    for browser in tabs.tabs where browser !== showingBrowser {
+      browser.stopWatching()
+    }
+    if isOnScreen {
+      showingBrowser.startWatching()
+    } else {
+      showingBrowser.stopWatching()
+    }
   }
 
   /// Redraws the tab bar, which is hidden while there is one tab.

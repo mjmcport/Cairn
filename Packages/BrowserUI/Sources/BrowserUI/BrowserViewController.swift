@@ -66,8 +66,23 @@ public final class BrowserViewController: NSViewController {
   /// folder has been listed.
   public var onTitleChange: (() -> Void)?
 
-  public init(location: URL, reader: any DirectoryReading = DirectoryReader()) {
-    model = BrowserModel(location: location, reader: reader)
+  /// A browser on the real file system, which lists its folder and, while
+  /// its owner says it is on screen, watches it.
+  public convenience init(location: URL) {
+    self.init(model: BrowserModel(location: location))
+  }
+
+  /// A browser that lists through `reader`. It watches nothing unless it is
+  /// also given a watcher.
+  public convenience init(
+    location: URL, reader: any DirectoryReading, watcher: (any FolderWatching)? = nil
+  ) {
+    self.init(model: BrowserModel(location: location, reader: reader, watcher: watcher))
+  }
+
+  private init(model: BrowserModel) {
+    self.model = model
+    let location = model.location
     super.init(nibName: nil, bundle: nil)
     // Set here, so a tab that has never been shown already has its title.
     title = Self.title(for: location)
@@ -190,6 +205,18 @@ public final class BrowserViewController: NSViewController {
     view.window?.makeFirstResponder(tableView)
   }
 
+  /// Watches the folder being shown, and each folder the browser moves to,
+  /// so the list follows changes made elsewhere. The owner calls this while
+  /// the browser is on screen, which a browser cannot know by itself.
+  public func startWatching() {
+    model.startWatching()
+  }
+
+  /// Stops watching, for a browser that is no longer on screen.
+  public func stopWatching() {
+    model.stopWatching()
+  }
+
   /// Stops a listing that is under way, for a browser that is going away.
   /// The cancelled listing publishes nothing.
   public func cancelLoad() {
@@ -215,7 +242,9 @@ public final class BrowserViewController: NSViewController {
   private func modelDidChange() {
     updateTitle()
     tableView.reloadData()
-    applyModelSelection()
+    // A refresh leaves the list where the user is looking: the selection is
+    // put back on the same items, and nothing scrolls.
+    applyModelSelection(scrollingToIt: model.lastPublish != .refresh)
     view.window?.validateToolbarItems()
 
     switch model.state {
@@ -230,15 +259,16 @@ public final class BrowserViewController: NSViewController {
     }
   }
 
-  /// Selects the rows the model says are selected and scrolls the first into view.
-  private func applyModelSelection() {
+  /// Selects the rows the model says are selected and, when asked, scrolls
+  /// the first into view.
+  private func applyModelSelection(scrollingToIt: Bool) {
     isApplyingModelSelection = true
     defer { isApplyingModelSelection = false }
 
     let rows = IndexSet(
       model.items.indices.filter { model.selection.contains(model.items[$0].url) })
     tableView.selectRowIndexes(rows, byExtendingSelection: false)
-    if let first = rows.first {
+    if scrollingToIt, let first = rows.first {
       tableView.scrollRowToVisible(first)
     }
   }

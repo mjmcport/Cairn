@@ -575,6 +575,159 @@ import Testing
     #expect(!back.isEnabled)
   }
 
+  // MARK: Who watches
+
+  /// A pane on `/fixture` in a window that is not on screen, with its first
+  /// tab loaded. Each watch begins with `live`, as a real one does.
+  private func watchedPane() async -> (
+    pane: PaneViewController, window: NSWindow, reader: StubReader, watcher: StubWatcher
+  ) {
+    let reader = reader()
+    let watcher = StubWatcher(sendsLive: true)
+    let pane = PaneViewController(location: root, reader: reader, watcher: watcher)
+    let window = NSWindow(contentViewController: pane)
+    await pane.showingBrowser.loadTask?.value
+    return (pane, window, reader, watcher)
+  }
+
+  @Test func aPaneWatchesTheShowingTabOnlyOnceItsViewHasAppeared() async throws {
+    let (pane, _, _, watcher) = await watchedPane()
+    #expect(watcher.requested.isEmpty)
+    #expect(!pane.showingBrowser.model.isWatching)
+
+    // What AppKit sends once the pane's view is on screen.
+    pane.viewDidAppear()
+    #expect(watcher.requested == [root])
+    #expect(watcher.watched == [root])
+  }
+
+  @Test func aNewTabIsWatchedAndTheTabItReplacedIsNot() async throws {
+    let (pane, _, _, watcher) = await watchedPane()
+    pane.viewDidAppear()
+    let first = pane.showingBrowser
+
+    pane.newTab(nil)
+    let second = pane.showingBrowser
+    // Both tabs are at the same folder, so the streams are told apart by count.
+    #expect(watcher.requested == [root, root])
+    await watcher.waitForEnd(of: root)
+    #expect(watcher.watched == [root])
+    #expect(!first.model.isWatching)
+    #expect(second.model.isWatching)
+
+    // The watch follows the showing tab into a folder.
+    await settle(pane)
+    try select("Sub", in: second)
+    second.openSelection(nil)
+    #expect(watcher.requested == [root, root, sub])
+    await watcher.waitForEnd(of: root, count: 2)
+    #expect(watcher.watched == [sub])
+  }
+
+  @Test func showingATabAgainWatchesItAndBringsItsListUpToDate() async throws {
+    let (pane, _, reader, watcher) = await watchedPane()
+    pane.viewDidAppear()
+    let first = pane.showingBrowser
+    let firstAnswered = AnsweredSignals(of: first.model)
+    // The first watch's `live` is answered before the tab is left.
+    await firstAnswered.wait(for: 1)
+    pane.newTab(nil)
+    let second = pane.showingBrowser
+    await settle(pane)
+    try select("Sub", in: second)
+    second.openSelection(nil)
+    await settle(pane)
+    await watcher.waitForEnd(of: root, count: 2)
+    try #require(watcher.watched == [sub])
+
+    // While the first tab was away, its folder changed.
+    reader.changed.update {
+      $0[root] = .items([FileItem(url: root.appending(path: "new.txt"), kind: .file)])
+    }
+    let listings = reader.listings(of: root)
+    pane.showPreviousTab(nil)
+    try #require(pane.showingBrowser === first)
+    await watcher.waitForEnd(of: sub)
+    #expect(watcher.watched == [root])
+
+    // One refresh, from the new watch's `live`.
+    await firstAnswered.wait(for: 2)
+    #expect(reader.listings(of: root) == listings + 1)
+    #expect(first.model.items.map(\.name) == ["new.txt"])
+    #expect(try table(of: first).numberOfRows == 1)
+  }
+
+  @Test func closingTheShowingTabMovesTheWatchAndClosingAnotherTabChangesNoWatch() async throws {
+    let (pane, _, _, watcher) = await watchedPane()
+    pane.viewDidAppear()
+    let first = pane.showingBrowser
+    pane.newTab(nil)
+    pane.newTab(nil)
+    await settle(pane)
+    let tabs = pane.tabs.tabs
+    try #require(tabs.count == 3 && pane.showingBrowser === tabs[2])
+    await watcher.waitForEnd(of: root, count: 2)
+    try #require(watcher.requested.count == 3 && tabs[2].model.isWatching)
+
+    // The first tab is not showing: closing it starts and stops nothing.
+    try #require(buttons(.closeTabButton, in: pane).first).performClick(nil)
+    try #require(pane.tabs.tabs == [tabs[1], tabs[2]])
+    #expect(watcher.requested.count == 3)
+    #expect(watcher.watched == [root])
+    #expect(tabs[2].model.isWatching && !first.model.isWatching)
+
+    // The showing tab closes: its watch ends and its neighbour's starts.
+    pane.closeTab(nil)
+    try #require(pane.showingBrowser === tabs[1])
+    #expect(watcher.requested.count == 4)
+    await watcher.waitForEnd(of: root, count: 3)
+    #expect(watcher.watched == [root])
+    #expect(tabs[1].model.isWatching && !tabs[2].model.isWatching)
+  }
+
+  @Test func aPaneThatLeavesTheScreenStopsWatchingAndOneThatReturnsRefreshes() async throws {
+    let (pane, _, reader, watcher) = await watchedPane()
+    let answered = AnsweredSignals(of: pane.showingBrowser.model)
+    pane.viewDidAppear()
+    await answered.wait(for: 1)
+
+    pane.viewDidDisappear()
+    // Required, not expected: a watch still running would be awaited forever.
+    try #require(!pane.showingBrowser.model.isWatching)
+    await watcher.waitForEnd(of: root)
+    #expect(watcher.watched.isEmpty)
+
+    let listings = reader.listings(of: root)
+    pane.viewDidAppear()
+    #expect(watcher.watched == [root])
+    await answered.wait(for: 2)
+    #expect(reader.listings(of: root) == listings + 1)
+  }
+
+  /// Asks AppKit, not the test: the window really goes on screen and closes.
+  @Test func closingAWindowThatWasOnScreenEndsTheWatch() async throws {
+    let (pane, window, _, watcher) = await watchedPane()
+    window.isReleasedWhenClosed = false
+    window.orderFront(nil)
+    // Required, not expected: without a watch there is nothing to see end.
+    try #require(watcher.watched == [root])
+    try #require(pane.showingBrowser.model.isWatching)
+
+    window.close()
+    // Required, not expected: a watch still running would be awaited forever.
+    try #require(!pane.showingBrowser.model.isWatching)
+    await watcher.waitForEnd(of: root)
+    #expect(watcher.watched.isEmpty)
+  }
+
+  @Test func aPaneGivenAReaderAndNoWatcherWatchesNothing() async throws {
+    let (pane, _) = await paneInAWindow()
+    pane.viewDidAppear()
+    pane.newTab(nil)
+    await settle(pane)
+    #expect(pane.tabs.tabs.allSatisfy { !$0.model.isWatching })
+  }
+
   private static func firstSubview<View: NSView>(of type: View.Type, in view: NSView) -> View? {
     if let match = view as? View { return match }
     for subview in view.subviews {
