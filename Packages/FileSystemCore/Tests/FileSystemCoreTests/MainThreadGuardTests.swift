@@ -79,6 +79,56 @@ import Testing
     #expect(violations.all.isEmpty)
   }
 
+  @Test @MainActor func startingAWatchOnTheMainThreadTripsTheGuard() async throws {
+    let tree = try FixtureTree.build { FixtureNode.file("a.txt") }
+    defer { try? tree.remove() }
+    let (_, continuation) = AsyncStream.makeStream(of: FolderChangeSignal.self)
+    let (stopped, reportStopped) = AsyncStream.makeStream(of: Void.self)
+
+    let violations = Violations()
+    let watch = MainThreadGuard.withHandler(violations.record) {
+      FolderWatcher.start(
+        watching: tree.root, continuation: continuation,
+        hooks: FolderWatcher.Hooks(onStopped: { reportStopped.finish() }))
+    }
+    // The start itself, then the path it resolves on the way.
+    #expect(
+      violations.all.map(\.entryPoint)
+        == ["start(watching:continuation:hooks:)", "resolvedPath(of:)"])
+
+    // The watch started all the same. Stop it before the fixture goes.
+    try #require(watch).stop()
+    for await _ in stopped {}
+  }
+
+  @Test @MainActor func resolvingAWatchedPathOnTheMainThreadTripsTheGuard() throws {
+    let tree = try FixtureTree.build { FixtureNode.file("a.txt") }
+    defer { try? tree.remove() }
+
+    let violations = Violations()
+    let path = MainThreadGuard.withHandler(violations.record) {
+      FolderWatcher.resolvedPath(of: tree.root)
+    }
+    #expect(path.hasSuffix(tree.root.lastPathComponent))
+    #expect(violations.all.map(\.entryPoint) == ["resolvedPath(of:)"])
+  }
+
+  @Test @MainActor func consumingAWatchOnTheMainActorDoesNotTripTheGuard() async throws {
+    let tree = try FixtureTree.build { FixtureNode.file("a.txt") }
+    defer { try? tree.remove() }
+
+    let violations = Violations()
+    var first: FolderChangeSignal?
+    await MainThreadGuard.withHandler(violations.record) {
+      for await signal in FolderWatcher().signals(for: tree.root) {
+        first = signal
+        break
+      }
+    }
+    #expect(first == .live)
+    #expect(violations.all.isEmpty)
+  }
+
   @Test @MainActor func savingAndListingDiagnosticsOnTheMainThreadTripTheGuard() throws {
     let directory = try TemporaryDirectory()
     defer { try? directory.remove() }

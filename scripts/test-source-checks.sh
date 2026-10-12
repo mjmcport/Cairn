@@ -41,6 +41,18 @@ expect $guard fail "guard: rejects a POSIX call without a guard"
 make_tree; echo 'let d = try Data(contentsOf: url)' > "$source_dir/Bad.swift"
 expect $guard fail "guard: rejects Data(contentsOf:) without a guard"
 
+make_tree; echo '    let stream = FSEventStreamCreate(nil, callback, &context, paths, since, 0.3, flags)' > "$source_dir/Bad.swift"
+expect $guard fail "guard: rejects FSEventStreamCreate without a guard"
+
+make_tree; printf 'MainThreadGuard.assertOffMainThread()\n    let stream = FSEventStreamCreate(nil, callback, &context, paths, since, 0.3, flags)\n' > "$source_dir/Good.swift"
+expect $guard pass "guard: allows FSEventStreamCreate with a guard"
+
+make_tree; echo '    guard let path = realpath(spelled, nil) else { return spelled }' > "$source_dir/Bad.swift"
+expect $guard fail "guard: rejects realpath without a guard"
+
+make_tree; printf 'MainThreadGuard.assertOffMainThread()\n    guard let path = realpath(spelled, nil) else { return spelled }\n' > "$source_dir/Good.swift"
+expect $guard pass "guard: allows realpath with a guard"
+
 make_tree; echo 'public init(url: URL, resourceValues values: URLResourceValues) {}' > "$source_dir/Fine.swift"
 expect $guard pass "guard: ignores a parameter named resourceValues"
 
@@ -134,6 +146,14 @@ expect $accessibility fail "space in path: accessibility rejects a direct label"
 make_ui_tree; echo "$toolbar_literal" >> "$ui_dir/View.swift"
 move_tree_under_a_space
 expect $accessibility fail "space in path: accessibility rejects a toolbar item built outside the helper file"
+
+make_tree; echo '    let stream = FSEventStreamCreate(nil, callback, &context, paths, since, 0.3, flags)' > "$source_dir/Bad.swift"
+move_tree_under_a_space
+expect $guard fail "space in path: guard rejects FSEventStreamCreate without a guard"
+
+make_tree; echo '    guard let path = realpath(spelled, nil) else { return spelled }' > "$source_dir/Bad.swift"
+move_tree_under_a_space
+expect $guard fail "space in path: guard rejects realpath without a guard"
 root="$work/tree"
 
 exit "$failed"

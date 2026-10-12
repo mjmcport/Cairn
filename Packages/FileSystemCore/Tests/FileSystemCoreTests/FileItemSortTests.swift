@@ -212,4 +212,37 @@ import Testing
     // It stops at the check that follows the cancellation: nothing more is compared.
     #expect(checks.value == [0, 1, 2, 3])
   }
+
+  // MARK: Comparing two listings off the caller's actor
+
+  @Test func listingsOfEqualItemsInTheSameOrderDoNotDiffer() async {
+    let listing = [item("a.txt", size: 1, modified: 10), item("Folder", kind: .directory)]
+    let same = [item("a.txt", size: 1, modified: 10), item("Folder", kind: .directory)]
+    #expect(await !listing.differs(from: same))
+    #expect(await ![FileItem]().differs(from: []))
+  }
+
+  @Test func aDifferentOrderOneItemMoreOrFewerOrAChangedItemEachDiffer() async {
+    let a = item("a.txt", size: 1, modified: 10)
+    let b = item("b.txt", size: 2, modified: 20)
+    let listing = [a, b]
+    #expect(await listing.differs(from: [b, a]))
+    #expect(await listing.differs(from: [a, b, item("c.txt")]))
+    #expect(await listing.differs(from: [a]))
+    #expect(await listing.differs(from: []))
+    #expect(await listing.differs(from: [a, item("b.txt", size: 3, modified: 20)]))
+    #expect(await listing.differs(from: [a, item("b.txt", size: 2, modified: 21)]))
+  }
+
+  @Test func comparingRunsOffTheMainThreadWhenAwaitedOnTheMainActor() async {
+    let items = mixed
+    let ranOnMainThread = Recorded<[Bool]>([])
+    let differs = await Task { @MainActor in
+      await items.differs(from: items) {
+        ranOnMainThread.value += [pthread_main_np() != 0]
+      }
+    }.value
+    #expect(!differs)
+    #expect(ranOnMainThread.value == [false])
+  }
 }
