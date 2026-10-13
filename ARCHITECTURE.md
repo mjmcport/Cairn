@@ -22,7 +22,7 @@ An arrow means "depends on". `BrowserUI` also uses `FileSystemCore` directly. No
 | Module | Responsibility | May import |
 | --- | --- | --- |
 | `App/` | Entry point, main menu, the window, the Settings window, MetricKit subscriber | AppKit, SwiftUI, MetricKit, BrowserUI, FileSystemCore |
-| `BrowserUI` | `PaneViewController` (one pane: its tabs, the window's title and keyboard focus), `TabList` (the order of a pane's tabs and which one is showing; no AppKit in it), `TabBarView` (the row of tabs, their close buttons and the New Tab button), `BrowserModel` (state of one browser: the folder shown, the folders open in it, the selection), `FolderKey` and `OpenFolder` (a folder open in place, by its names from the folder shown), `BrowserHistory` (its back and forward places, with the selection and the open folders left at each), `BrowserViewController` (the list, an outline; one per tab), `OutlineNode` (the handle of one outline row), `IconCollectionView`, `IconItem`, `GenericIcons`, `ThumbnailLoader` and `ThumbnailCache`, `TypeAhead` (the icon presentation and its pictures), `BrowserToolbar` (the Back and Forward buttons), `BrowserSettings` and `SettingsView` (the one setting, and its window's content), `AccessibilityElement`, `InitialLocation` | AppKit, SwiftUI, the three core packages |
+| `BrowserUI` | `PaneViewController` (one pane: its tabs, the window's title and keyboard focus), `TabList` (the order of a pane's tabs and which one is showing; no AppKit in it), `TabBarView` (the row of tabs, their close buttons and the New Tab button), `BrowserModel` (state of one browser: the folder shown, the folders open in it, the selection), `FolderKey` and `OpenFolder` (a folder open in place, by its names from the folder shown), `BrowserHistory` (its back and forward places, with the selection and the open folders left at each), `BrowserViewController` (the list, an outline; one per tab), `OutlineNode` (the handle of one outline row), `IconCollectionView`, `IconItem`, `GenericIcons`, `ThumbnailLoader` and `ThumbnailCache`, `TypeAhead` (the icon presentation and its pictures), `ColumnBrowserController` and `PreviewViewController` (the column presentation and its preview), `BrowserToolbar` (the Back and Forward buttons), `BrowserSettings` and `SettingsView` (the one setting, and its window's content), `AccessibilityElement`, `InitialLocation` | AppKit, SwiftUI, the three core packages |
 | `FileOperations` | `FileOperation` today; the operation engine in Phase 1 | Foundation, FileSystemCore |
 | `FileMetadata` | `ThumbnailProviding` and `QuickLookThumbnailer` (a picture of a file, as a `CGImage`), `MetadataGroup`; Get Info readers in Phase 1 | Foundation, CoreGraphics, QuickLookThumbnailing, FileSystemCore |
 | `FileSystemCore` | `FileItem` (with its size on disk, the date it was added and whether it is online only), `DirectoryReader`, `FileItemSort` (name, size, size on disk, dates modified and added), `FolderWatcher` (one FSEvents stream per watched folder), `MainThreadGuard`, `Log`, `LocalDiagnosticsStore` | Foundation, os, CoreServices |
@@ -85,6 +85,17 @@ The setting is `BrowserSettings.rememberOpenFolders`, in the user defaults, on u
 6. A cell is one accessibility element that speaks the name, the kind and whether the file is online only. Its picture and cloud mark are decoration and are not elements.
 7. `NSCollectionView` has no type-to-select and no double-click action. A small subclass forwards typed characters and a double-click, and `TypeAhead` (a value with no clock of its own) decides what has been typed.
 
+## How a folder is shown as columns
+
+`View > as Columns` (Command-3) shows the showing tab's folder as a row of columns with a preview. It is the third value of `BrowserModel.viewMode`; the items, selection, sort, history and watches are the same as in the other two.
+
+1. The columns are the model's open chain. Column 0 lists `model.items`; each next column lists the open folder that is selected in the one before it. Nothing is copied: the `NSBrowser` asks the model through its item-based delegate, and its handles are `OutlineNode`s, as the outline's are.
+2. Selecting in a column is a request to the model. The controller works out the folders that lead to what is selected, opens those the model has not got open (so they are listed and watched), closes the others, and sets the model's selection. Only then does it ask for the preview. A flag stops the model's own publishes, which come back from that request, from being drawn as if they were changes made elsewhere. Without the flag the reload and the selection feed each other until the process dies.
+3. A folder's rows arrive later than its selection. When the model publishes the listing, only that folder's column is reloaded and the selection is put back.
+4. Switching to columns keeps the folders that lead to the selected items and closes the others (`pruneOpenFolders`); switching to the list leaves them open, and switching to icons closes them.
+5. The last column is a `PreviewViewController` for a file: the same picture pipeline as the icon view at a larger size, the name, and facts as words ("Size: 2 kB", "Availability: Online only, not on this Mac"). Several items show a count and a total and make no pictures, and a file that is online only is never asked for a picture.
+6. Each column's list is named by its place ("Column 1"), and the preview's picture carries its description on the image itself, because that is where the audit reads it from.
+
 ## Tabs
 
 A pane keeps every tab's browser alive as a child view controller, so a tab that is not showing keeps its folder, history, selection, open folders, sort, view mode and scroll position, and finishes a listing it had started. Only the showing tab is watched for changes on disk, and only while the pane is on screen; a tab that is shown again refreshes its list as its watch starts. Closing a tab cancels its listing and stops its watch. Closing the last tab closes the window.
@@ -137,4 +148,4 @@ Each decision that shaped this structure has a record in [`docs/adr`](docs/adr):
 
 ## What is not here yet
 
-Phase 0 is a skeleton. The sidebar, the column view, Get Info, file operations, undo, state restoration, signing and updates all arrive in Phase 1. The plan is the Claude Doc "Mac file manager implementation plan".
+Phase 0 is a skeleton. The sidebar, Get Info, file operations, undo, state restoration, signing and updates all arrive in Phase 1. The plan is the Claude Doc "Mac file manager implementation plan".

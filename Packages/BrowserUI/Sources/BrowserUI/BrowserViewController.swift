@@ -90,6 +90,12 @@ public final class BrowserViewController: NSViewController {
   /// Makes the pictures of the icon presentation. Tests replace it before the
   /// view loads, to stand in for the system's thumbnail generator.
   var thumbnailLoader = ThumbnailLoader(provider: QuickLookThumbnailer())
+  /// The column presentation and its preview, made when first needed so that
+  /// a test's loader is the one they use.
+  lazy var previewController = PreviewViewController(
+    loader: thumbnailLoader, icons: genericIcons)
+  lazy var columns = ColumnBrowserController(
+    model: model, icons: genericIcons, preview: previewController)
   private let statusLabel = NSTextField(wrappingLabelWithString: "")
   /// The model action in flight, if any. Tests await it.
   private(set) var loadTask: Task<Void, Never>?
@@ -201,14 +207,24 @@ public final class BrowserViewController: NSViewController {
     iconScrollView.translatesAutoresizingMaskIntoConstraints = false
     iconScrollView.isHidden = true
 
+    let columnBrowser = columns.browser
+    columnBrowser.translatesAutoresizingMaskIntoConstraints = false
+    columnBrowser.isHidden = true
+    columns.onOpen = { [weak self] in self?.openSelection(nil) }
+
     container.addSubview(scrollView)
     container.addSubview(iconScrollView)
+    container.addSubview(columnBrowser)
     container.addSubview(statusLabel)
     NSLayoutConstraint.activate([
       scrollView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
       scrollView.trailingAnchor.constraint(equalTo: container.trailingAnchor),
       scrollView.topAnchor.constraint(equalTo: container.topAnchor),
       scrollView.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+      columnBrowser.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+      columnBrowser.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+      columnBrowser.topAnchor.constraint(equalTo: container.topAnchor),
+      columnBrowser.bottomAnchor.constraint(equalTo: container.bottomAnchor),
       iconScrollView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
       iconScrollView.trailingAnchor.constraint(equalTo: container.trailingAnchor),
       iconScrollView.topAnchor.constraint(equalTo: container.topAnchor),
@@ -237,8 +253,8 @@ public final class BrowserViewController: NSViewController {
 
   /// Opens the selected item. Sent by File > Open through the responder chain.
   @objc public func openSelection(_ sender: Any?) {
-    if model.viewMode == .icons {
-      guard let item = singleSelectedIconItem else { return }
+    if model.viewMode != .list {
+      guard let item = singleSelectedItem else { return }
       openItem(item)
     } else {
       open(row: outlineView.selectedRow)
@@ -286,6 +302,11 @@ public final class BrowserViewController: NSViewController {
     model.setViewMode(.icons)
   }
 
+  /// Shows the folder as columns with a preview. Sent by View > as Columns.
+  @objc public func showAsColumns(_ sender: Any?) {
+    model.setViewMode(.columns)
+  }
+
   @objc private func openClickedRow(_ sender: Any?) {
     open(row: outlineView.clickedRow)
   }
@@ -303,9 +324,9 @@ public final class BrowserViewController: NSViewController {
     run { await $0.load() }
   }
 
-  /// The one selected item of the icon presentation, or nil.
-  private var singleSelectedIconItem: FileItem? {
-    let selected = model.items.filter { model.selection.contains($0.url) }
+  /// The one selected item of the icon or column presentation, or nil.
+  private var singleSelectedItem: FileItem? {
+    let selected = model.selectedItems
     return selected.count == 1 ? selected[0] : nil
   }
 
@@ -322,7 +343,13 @@ public final class BrowserViewController: NSViewController {
   /// Puts keyboard focus in the file list. Does nothing while the browser's
   /// view is not in a window.
   public func focusList() {
-    view.window?.makeFirstResponder(model.viewMode == .icons ? iconView : outlineView)
+    let target: NSView =
+      switch model.viewMode {
+      case .list: outlineView
+      case .icons: iconView
+      case .columns: columns.browser
+      }
+    view.window?.makeFirstResponder(target)
   }
 
   /// Watches the folder being shown, and each folder the browser moves to,
@@ -372,12 +399,23 @@ public final class BrowserViewController: NSViewController {
       reloadEverything()
       applyModelSelection(scrollingToIt: false)
     case .folder:
-      if let key = model.lastChangedFolder, model.viewMode == .list {
-        reloadFolder(key)
+      if model.viewMode == .columns {
+        // A change the controller itself asked for is already drawn.
+        if !columns.isApplying {
+          if let key = model.lastChangedFolder {
+            columns.reloadColumn(of: key)
+          } else {
+            columns.reload()
+          }
+        }
       } else {
-        reloadEverything()
+        if let key = model.lastChangedFolder, model.viewMode == .list {
+          reloadFolder(key)
+        } else {
+          reloadEverything()
+        }
+        applyModelSelection(scrollingToIt: false)
       }
-      applyModelSelection(scrollingToIt: false)
     case .resort:
       reloadEverything()
       updateSortIndicator()
@@ -416,7 +454,11 @@ public final class BrowserViewController: NSViewController {
     defer { isApplyingModelState = false }
     guard model.viewMode == .list else {
       // The outline is not on screen; it is reloaded when the list returns.
-      iconView.reloadData()
+      if model.viewMode == .columns {
+        columns.reload()
+      } else {
+        iconView.reloadData()
+      }
       return
     }
     itemNodes.removeAll()
@@ -468,6 +510,10 @@ public final class BrowserViewController: NSViewController {
       applyIconSelection(scrollingToIt: scrollingToIt)
       return
     }
+    if model.viewMode == .columns {
+      // `reload()` has already put the selection back.
+      return
+    }
     isApplyingModelState = true
     defer { isApplyingModelState = false }
 
@@ -495,11 +541,20 @@ public final class BrowserViewController: NSViewController {
   /// Puts the outline or the icons on screen, whichever the model's mode
   /// says, and keeps keyboard focus in the list that is showing.
   private func showTheModesView() {
-    let icons = model.viewMode == .icons
-    guard iconScrollView.isHidden == icons else { return }
-    let hadFocus = view.window?.firstResponder === (icons ? outlineView : iconView)
-    scrollView.isHidden = icons
-    iconScrollView.isHidden = !icons
+    let mode = model.viewMode
+    let showsList = mode == .list
+    let showsIcons = mode == .icons
+    let showsColumns = mode == .columns
+    guard
+      scrollView.isHidden == showsList || iconScrollView.isHidden == showsIcons
+        || columns.browser.isHidden == showsColumns
+    else { return }
+    let hadFocus = [outlineView, iconView, columns.browser].contains {
+      view.window?.firstResponder === $0
+    }
+    scrollView.isHidden = !showsList
+    iconScrollView.isHidden = !showsIcons
+    columns.browser.isHidden = !showsColumns
     if hadFocus { focusList() }
   }
 
@@ -654,8 +709,8 @@ extension BrowserViewController: NSUserInterfaceValidations {
     case #selector(goToEnclosingFolder(_:)):
       return model.enclosingFolder != nil
     case #selector(openSelection(_:)):
-      if model.viewMode == .icons {
-        return singleSelectedIconItem?.isNavigable == true
+      if model.viewMode != .list {
+        return singleSelectedItem?.isNavigable == true
       }
       guard outlineView.selectedRowIndexes.count == 1 else { return false }
       let node = outlineView.item(atRow: outlineView.selectedRow) as? OutlineNode
@@ -665,6 +720,9 @@ extension BrowserViewController: NSUserInterfaceValidations {
       return true
     case #selector(showAsIcons(_:)):
       (item as? NSMenuItem)?.state = model.viewMode == .icons ? .on : .off
+      return true
+    case #selector(showAsColumns(_:)):
+      (item as? NSMenuItem)?.state = model.viewMode == .columns ? .on : .off
       return true
     case #selector(toggleFoldersFirst(_:)):
       (item as? NSMenuItem)?.state = model.sort.foldersFirst ? .on : .off
