@@ -61,6 +61,34 @@ final class AccessibilityTests: XCTestCase {
     }
   }
 
+  /// The most common colors in an element's screenshot, as `RRGGBB x pixels`:
+  /// what the audit sees when it judges the element's contrast.
+  @MainActor
+  private static func colors(of element: XCUIElement) -> String {
+    guard element.exists,
+      let image = element.screenshot().image.cgImage(
+        forProposedRect: nil, context: nil, hints: nil)
+    else { return "no image" }
+    let width = image.width
+    let height = image.height
+    var data = [UInt8](repeating: 0, count: width * height * 4)
+    guard
+      let context = CGContext(
+        data: &data, width: width, height: height, bitsPerComponent: 8, bytesPerRow: width * 4,
+        space: CGColorSpaceCreateDeviceRGB(),
+        bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
+    else { return "no context" }
+    context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+    var counts: [UInt32: Int] = [:]
+    for index in stride(from: 0, to: data.count, by: 4) {
+      let key = UInt32(data[index]) << 16 | UInt32(data[index + 1]) << 8 | UInt32(data[index + 2])
+      counts[key, default: 0] += 1
+    }
+    let top = counts.sorted { $0.value > $1.value }.prefix(4)
+      .map { String(format: "%06X x%d", $0.key, $0.value) }
+    return "\(width)x\(height) " + top.joined(separator: ", ")
+  }
+
   /// The code XCTest uses for "Audit failed to complete in time".
   private static let auditTimedOut = -56
 
@@ -87,9 +115,14 @@ final class AccessibilityTests: XCTestCase {
         return true
       }
       let windowFrame = app.windows[AccessibilityElement.mainWindow.identifier].frame
+      let outline = app.outlines[AccessibilityElement.fileList.identifier]
+      let neighbours = ["alpha.txt", "Sub"].map {
+        "\($0): " + Self.colors(of: outline.staticTexts[$0])
+      }.joined(separator: "; ")
       XCTFail(
         "\(screen): \(issue.compactDescription) [type \(element.elementType.rawValue), "
           + "id '\(element.identifier)', label '\(element.label)'] \(issue.detailedDescription)"
+          + " | colors \(Self.colors(of: element)) | \(neighbours)"
           + " | frame \(element.frame) in window \(windowFrame)"
           + " | \(String(element.debugDescription.prefix(500)))")
       return true
