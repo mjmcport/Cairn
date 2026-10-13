@@ -3,13 +3,14 @@
 # labels are set only through AccessibilityElement and its helpers, so no
 # control gets a test hook without a declared, spoken identity. A toolbar
 # item's identifier is its button's identity, so toolbar items and their
-# identifiers are built only in the helper file too.
+# identifiers are built only in the helper file too. SwiftUI sets the same
+# two things with modifiers, which are held to the same rule.
 #
 # Set CAIRN_ROOT to check a different tree (used by the script's own test).
 
 root="${CAIRN_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}"
 helper="Packages/BrowserUI/Sources/BrowserUI/Accessibility.swift"
-direct_calls='setAccessibilityIdentifier\(|setAccessibilityLabel\(|NSUserInterfaceItemIdentifier\("|NSToolbarItem\.Identifier\(|\(itemIdentifier:'
+direct_calls='setAccessibilityIdentifier\(|setAccessibilityLabel\(|NSUserInterfaceItemIdentifier\("|NSToolbarItem\.Identifier\(|\(itemIdentifier:|\.accessibilityIdentifier\(|\.accessibilityLabel\('
 failures=0
 
 # Split the file list on newlines only, so a path with a space stays one file.

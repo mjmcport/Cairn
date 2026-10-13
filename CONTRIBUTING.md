@@ -21,6 +21,7 @@ Cairn is MIT licensed, and every line in it must be compatible with that.
 
 - Every change ships with its tests in the same commit. A change without tests is incomplete.
 - Unit tests use Swift Testing. Performance tests use XCTest. End-to-end tests use XCUITest.
+- A unit test that asserts on a clock, such as "a change shows within a second", goes in a suite named in `TIMING_SUITES` in the `Makefile`. `make test` runs those suites alone, after the rest: every suite of a package shares one process and one main actor, so in the parallel run such a test measures how busy the other suites keep it, not the code it is about. Do not widen the bound to make it pass in the parallel run.
 - A change that touches the app's interface needs an end-to-end test.
 - Tests may read and write only temporary fixture folders. They must never touch Desktop, Documents or any other real user folder.
 - A flaky test gets an issue and is quarantined. Do not retry it silently.

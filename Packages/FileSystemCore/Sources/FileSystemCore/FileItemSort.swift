@@ -5,7 +5,11 @@ public struct FileItemSort: Sendable, Equatable {
   public enum Key: Sendable, Equatable {
     case name
     case size
+    /// The bytes a file takes on disk, not its logical size.
+    case sizeOnDisk
     case modificationDate
+    /// When the item was added to its folder.
+    case dateAdded
   }
 
   public var key: Key
@@ -79,9 +83,12 @@ public struct FileItemSort: Sendable, Equatable {
       case .name: .orderedSame
       // A folder has no size and sorts as smaller than any file.
       case .size: Self.compare(lhs.size ?? -1, rhs.size ?? -1)
+      case .sizeOnDisk: Self.compare(lhs.allocatedSize ?? -1, rhs.allocatedSize ?? -1)
       case .modificationDate:
         Self.compare(
           lhs.modificationDate ?? .distantPast, rhs.modificationDate ?? .distantPast)
+      case .dateAdded:
+        Self.compare(lhs.dateAdded ?? .distantPast, rhs.dateAdded ?? .distantPast)
       }
     if primary != .orderedSame {
       return (primary == .orderedAscending) == ascending

@@ -119,4 +119,42 @@ import Testing
     let unresolved = URL(filePath: String(sub.path.dropFirst("/private".count)))
     #expect(!BrowserHistory.isSamePlace(sub, unresolved))
   }
+
+  // MARK: Open folders
+
+  private let subKey = FolderKey(names: ["Sub"])
+  private let deepKey = FolderKey(names: ["Sub", "Deep"])
+
+  @Test func anEntryKeepsTheOpenFoldersItWasGivenAndNoneWithoutThem() {
+    var history = BrowserHistory(current: a)
+    history.visit(b, leaving: [file], openFolders: [subKey, deepKey])
+    history.visit(c)
+
+    #expect(history.backEntries.map(\.openFolders) == [[subKey, deepKey], []])
+    #expect(history.backEntries.first?.selection == [file])
+  }
+
+  @Test func openFoldersTravelWithTheSelectionInBothDirections() {
+    var history = BrowserHistory(current: a)
+    history.visit(b, leaving: [], openFolders: [subKey])
+
+    let back = history.goBack(leaving: [], openFolders: [deepKey])
+    #expect(back?.openFolders == [subKey])
+    #expect(history.forwardEntries.first?.openFolders == [deepKey])
+
+    let forward = history.goForward(leaving: [], openFolders: [subKey, deepKey])
+    #expect(forward?.openFolders == [deepKey])
+    #expect(history.backEntries.last?.openFolders == [subKey, deepKey])
+  }
+
+  @Test func theLimitDropsAnEntryWithItsOpenFolders() {
+    var history = BrowserHistory(current: a)
+    for index in 0...BrowserHistory.limit {
+      history.visit(
+        URL(filePath: "/p\(index)", directoryHint: .isDirectory), leaving: [],
+        openFolders: [FolderKey(names: ["F\(index)"])])
+    }
+    #expect(history.backEntries.count == BrowserHistory.limit)
+    #expect(history.backEntries.first?.openFolders == [FolderKey(names: ["F1"])])
+  }
 }

@@ -38,22 +38,22 @@ final class BrowsingTests: XCTestCase {
   @MainActor
   private func launch(on folder: URL) -> XCUIElement {
     launchApp(arguments: ["-OpenFolder", folder.path])
-    let table = app.tables[AccessibilityElement.fileList.identifier]
+    let table = app.outlines[AccessibilityElement.fileList.identifier]
     XCTAssertTrue(table.waitForExistence(timeout: 10), "The file list did not appear")
     return table
   }
 
   @MainActor
   private func waitForRowCount(_ count: Int, in table: XCUIElement, _ message: String) {
-    let matches = NSPredicate { _, _ in table.tableRows.count == count }
+    let matches = NSPredicate { _, _ in table.outlineRows.count == count }
     let expectation = XCTNSPredicateExpectation(predicate: matches, object: nil)
     let result = XCTWaiter.wait(for: [expectation], timeout: 10)
-    XCTAssertEqual(result, .completed, "\(message): found \(table.tableRows.count) rows")
+    XCTAssertEqual(result, .completed, "\(message): found \(table.outlineRows.count) rows")
   }
 
   @MainActor
   private func row(_ name: String, in table: XCUIElement) -> XCUIElement {
-    table.tableRows.containing(.staticText, identifier: name).firstMatch
+    table.outlineRows.containing(.staticText, identifier: name).firstMatch
   }
 
   @MainActor
@@ -110,7 +110,7 @@ final class BrowsingTests: XCTestCase {
     let status = app.staticTexts[AccessibilityElement.browserStatus.identifier]
     XCTAssertTrue(status.waitForExistence(timeout: 10), "No explanation was shown")
     XCTAssertFalse((status.value as? String ?? "").isEmpty)
-    XCTAssertEqual(app.tables[AccessibilityElement.fileList.identifier].tableRows.count, 0)
+    XCTAssertEqual(app.outlines[AccessibilityElement.fileList.identifier].outlineRows.count, 0)
   }
 
   /// A folder larger than the reader's first batch of 2,000 items reaches the
@@ -131,8 +131,8 @@ final class BrowsingTests: XCTestCase {
     addTeardownBlock { try? large.remove() }
 
     let table = launch(on: large.root)
-    let first = table.tableRows.element(boundBy: 0)
-    let second = table.tableRows.element(boundBy: 1)
+    let first = table.outlineRows.element(boundBy: 0)
+    let second = table.outlineRows.element(boundBy: 1)
     XCTAssertTrue(
       first.staticTexts["Before"].waitForExistence(timeout: 30),
       "The list did not settle with the folder first")

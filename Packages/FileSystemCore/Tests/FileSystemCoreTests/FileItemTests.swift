@@ -29,5 +29,21 @@ import Testing
     let item = FileItem(url: URL(filePath: "/tmp/a"), kind: .file)
     #expect(item.size == nil)
     #expect(item.modificationDate == nil)
+    #expect(item.allocatedSize == nil)
+    #expect(item.dateAdded == nil)
+  }
+
+  @Test func theListingKeysCoverEveryValueAnItemHolds() {
+    let keys = FileItem.resourceKeys
+    #expect(keys.contains(.totalFileAllocatedSizeKey))
+    #expect(keys.contains(.addedToDirectoryDateKey))
+  }
+
+  @Test func itemsThatDifferOnlyInTheNewValuesAreNotEqual() {
+    let url = URL(filePath: "/tmp/a")
+    let base = FileItem(url: url, kind: .file, size: 1)
+    #expect(base != FileItem(url: url, kind: .file, size: 1, allocatedSize: 4_096))
+    #expect(
+      base != FileItem(url: url, kind: .file, size: 1, dateAdded: Date(timeIntervalSince1970: 1)))
   }
 }

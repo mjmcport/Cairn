@@ -29,14 +29,14 @@ final class HistoryTests: XCTestCase {
     app.launchArguments = ["-OpenFolder", tree.root.path, "-ApplePersistenceIgnoreState", "YES"]
     app.launch()
     addTeardownBlock { @MainActor in app.terminate() }
-    let table = app.tables[AccessibilityElement.fileList.identifier]
+    let table = app.outlines[AccessibilityElement.fileList.identifier]
     XCTAssertTrue(table.staticTexts["Sub"].waitForExistence(timeout: 10))
     return (app, table, app.windows[AccessibilityElement.mainWindow.identifier])
   }
 
   @MainActor
   private func row(_ name: String, in table: XCUIElement) -> XCUIElement {
-    table.tableRows.containing(.staticText, identifier: name).firstMatch
+    table.outlineRows.containing(.staticText, identifier: name).firstMatch
   }
 
   /// Opens the Go menu, reads which of its items are enabled and closes it.
@@ -144,7 +144,7 @@ final class HistoryTests: XCTestCase {
     ]
     app.launch()
     addTeardownBlock { @MainActor in app.terminate() }
-    let table = app.tables[AccessibilityElement.fileList.identifier]
+    let table = app.outlines[AccessibilityElement.fileList.identifier]
     XCTAssertTrue(table.staticTexts["deepest.txt"].waitForExistence(timeout: 10))
 
     app.typeKey(.upArrow, modifierFlags: .command)

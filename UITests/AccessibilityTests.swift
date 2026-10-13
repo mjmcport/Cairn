@@ -96,10 +96,42 @@ final class AccessibilityTests: XCTestCase {
   @MainActor
   func testAuditPassesOnAPopulatedFolder() throws {
     let app = launch(on: tree.root.path)
-    let table = app.tables[AccessibilityElement.fileList.identifier]
+    let table = app.outlines[AccessibilityElement.fileList.identifier]
     XCTAssertTrue(table.staticTexts["alpha.txt"].waitForExistence(timeout: 10))
     XCTAssertEqual(table.label, AccessibilityElement.fileList.label)
     try audit(app, "Populated folder")
+  }
+
+  @MainActor
+  func testAuditPassesWithAFolderOpenInPlace() throws {
+    let app = launch(on: tree.root.path)
+    let outline = app.outlines[AccessibilityElement.fileList.identifier]
+    let sub = outline.outlineRows.containing(.staticText, identifier: "Sub").firstMatch
+    XCTAssertTrue(sub.waitForExistence(timeout: 10))
+    sub.disclosureTriangles.firstMatch.click()
+    XCTAssertTrue(outline.staticTexts["inner.txt"].waitForExistence(timeout: 10))
+    try audit(app, "Folder open in place")
+  }
+
+  @MainActor
+  func testAuditPassesOnTheSettingsWindowAndItsCheckboxIsFoundByIdentifier() throws {
+    let app = launch(on: tree.root.path)
+    XCTAssertTrue(
+      app.outlines[AccessibilityElement.fileList.identifier].waitForExistence(timeout: 10))
+    app.typeKey(",", modifierFlags: .command)
+    let window = app.windows[AccessibilityElement.settingsWindow.identifier]
+    XCTAssertTrue(window.waitForExistence(timeout: 10), "Settings did not open")
+    XCTAssertEqual(window.title, "Settings")
+    let toggle = window.checkBoxes[AccessibilityElement.rememberOpenFoldersToggle.identifier]
+    XCTAssertTrue(toggle.exists)
+    XCTAssertEqual(toggle.label, AccessibilityElement.rememberOpenFoldersToggle.label)
+    // The main window overlaps Settings and is drawn dimmer behind it, so it
+    // is closed first and the audit sees the Settings window alone. The app
+    // stays running with no window.
+    app.windows[AccessibilityElement.mainWindow.identifier].buttons[XCUIIdentifierCloseWindow]
+      .click()
+    XCTAssertFalse(app.windows[AccessibilityElement.mainWindow.identifier].exists)
+    try audit(app, "Settings window")
   }
 
   @MainActor
@@ -122,7 +154,7 @@ final class AccessibilityTests: XCTestCase {
   @MainActor
   func testAFolderCanBeOpenedAndLeftWithTheKeyboardAlone() {
     let app = launch(on: tree.root.path)
-    let table = app.tables[AccessibilityElement.fileList.identifier]
+    let table = app.outlines[AccessibilityElement.fileList.identifier]
     let window = app.windows[AccessibilityElement.mainWindow.identifier]
     XCTAssertTrue(table.staticTexts["Sub"].waitForExistence(timeout: 10))
 
@@ -149,7 +181,7 @@ final class AccessibilityTests: XCTestCase {
   func testAuditPassesWithTwoTabs() throws {
     // Both tabs are titled "Sub": the audit reads a tab's title as its name.
     let app = launch(on: tree.path("Sub"))
-    let table = app.tables[AccessibilityElement.fileList.identifier]
+    let table = app.outlines[AccessibilityElement.fileList.identifier]
     XCTAssertTrue(table.staticTexts["inner.txt"].waitForExistence(timeout: 10))
 
     app.typeKey("t", modifierFlags: .command)
@@ -165,7 +197,7 @@ final class AccessibilityTests: XCTestCase {
   @MainActor
   func testTabsCanBeOpenedSwitchedAndClosedWithTheKeyboardAlone() {
     let app = launch(on: tree.root.path)
-    let table = app.tables[AccessibilityElement.fileList.identifier]
+    let table = app.outlines[AccessibilityElement.fileList.identifier]
     let window = app.windows[AccessibilityElement.mainWindow.identifier]
     let bar = tabBar(app)
     XCTAssertTrue(table.staticTexts["Sub"].waitForExistence(timeout: 10))
@@ -186,7 +218,7 @@ final class AccessibilityTests: XCTestCase {
     XCTAssertTrue(table.staticTexts["alpha.txt"].waitForExistence(timeout: 10))
     app.typeKey(.downArrow, modifierFlags: [])
     XCTAssertTrue(
-      table.tableRows.containing(.staticText, identifier: "alpha.txt").firstMatch.isSelected)
+      table.outlineRows.containing(.staticText, identifier: "alpha.txt").firstMatch.isSelected)
 
     // Command-W closes tab 1. Tab 2 is left, where it was, and takes the keyboard.
     app.typeKey("w", modifierFlags: .command)

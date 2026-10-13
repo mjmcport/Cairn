@@ -11,6 +11,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   private var window: NSWindow?
   private let diagnostics = DiagnosticsSubscriber()
   private let toolbar = BrowserToolbar()
+  private let settingsWindow = SettingsWindowController()
 
   static func main() {
     let application = NSApplication.shared
@@ -58,6 +59,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   /// handles the command first.
   @objc func closeTab(_ sender: Any?) {
     NSApp.keyWindow?.performClose(sender)
+  }
+
+  /// Cairn > Settings…
+  @objc func showSettings(_ sender: Any?) {
+    settingsWindow.show()
   }
 
   func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {

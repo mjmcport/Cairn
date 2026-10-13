@@ -1,5 +1,6 @@
 import FileSystemCore
 import Foundation
+import Testing
 
 @testable import BrowserUI
 
@@ -10,11 +11,8 @@ import Foundation
 /// Unlike the real watcher it sends no `live` signal unless asked to, and it
 /// keeps every signal: what a model does with several is the model's doing.
 final class StubWatcher: FolderWatching, @unchecked Sendable {
-  private typealias Waiter = CheckedContinuation<Void, Never>
-
   // Guarded by `lock`.
   private var feeds: [Feed] = []
-  private var endWaiters: [(folder: URL, count: Int, continuation: Waiter)] = []
   private let lock = NSLock()
   /// Whether every stream ends as soon as it is asked for, like a watch that
   /// could not start.
@@ -28,9 +26,7 @@ final class StubWatcher: FolderWatching, @unchecked Sendable {
   }
 
   func signals(for folder: URL) -> AsyncStream<FolderChangeSignal> {
-    let feed = Feed(folder: folder, queued: sendsLive ? [.live] : []) { [weak self] in
-      self?.aStreamEnded()
-    }
+    let feed = Feed(folder: folder, queued: sendsLive ? [.live] : []) {}
     lock.withLock { feeds.append(feed) }
     if endsAtOnce {
       feed.end()
@@ -38,16 +34,6 @@ final class StubWatcher: FolderWatching, @unchecked Sendable {
     // The stream asks for each signal as its consumer does, so the feed
     // knows when the consumer has finished with the one before.
     return AsyncStream(unfolding: { await feed.next() }, onCancel: { feed.end() })
-  }
-
-  private func aStreamEnded() {
-    let ready = lock.withLock {
-      let ended = endedCounts
-      let ready = endWaiters.filter { ended[$0.folder, default: 0] >= $0.count }
-      endWaiters.removeAll { ended[$0.folder, default: 0] >= $0.count }
-      return ready
-    }
-    for waiter in ready { waiter.continuation.resume() }
   }
 
   /// How many streams of each folder have ended. Call with `lock` held.
@@ -70,15 +56,17 @@ final class StubWatcher: FolderWatching, @unchecked Sendable {
     await feed?.send(signal)
   }
 
-  /// Waits until `count` streams of `folder` have ended.
-  func waitForEnd(of folder: URL, count: Int = 1) async {
-    await withCheckedContinuation { continuation in
-      let hasEnded = lock.withLock {
-        if endedCounts[folder, default: 0] >= count { return true }
-        endWaiters.append((folder, count, continuation))
-        return false
+  /// Waits until `count` streams of `folder` have ended, for at most
+  /// ``bound``, and records an issue when they have not: a watch that was
+  /// not stopped fails the test instead of hanging it.
+  func waitForEnd(of folder: URL, count: Int = 1, bound: Duration = .seconds(10)) async {
+    let deadline = ContinuousClock.now + bound
+    while lock.withLock({ endedCounts[folder, default: 0] }) < count {
+      guard ContinuousClock.now < deadline else {
+        Issue.record("The stream for \(folder.lastPathComponent) never ended")
+        return
       }
-      if hasEnded { continuation.resume() }
+      try? await Task.sleep(for: .milliseconds(2))
     }
   }
 }
@@ -183,21 +171,25 @@ private final class Feed: @unchecked Sendable {
 @MainActor
 final class AnsweredSignals {
   private(set) var count = 0
-  private var waiters: [(count: Int, continuation: CheckedContinuation<Void, Never>)] = []
 
   /// Installs itself as the model's hook. It does not hold the model.
   init(of model: BrowserModel) {
     model.onSignalsAnswered = { [self] in
       count += 1
-      let ready = waiters.filter { $0.count <= count }
-      waiters.removeAll { $0.count <= count }
-      for waiter in ready { waiter.continuation.resume() }
     }
   }
 
-  /// Waits until the session has gone quiet `count` times in all.
-  func wait(for count: Int) async {
-    guard self.count < count else { return }
-    await withCheckedContinuation { waiters.append((count, $0)) }
+  /// Waits until the session has gone quiet `count` times in all, for at
+  /// most `bound`, and records an issue when it has not: a signal that was
+  /// never answered fails the test instead of hanging it.
+  func wait(for count: Int, bound: Duration = .seconds(10)) async {
+    let deadline = ContinuousClock.now + bound
+    while self.count < count {
+      guard ContinuousClock.now < deadline else {
+        Issue.record("The model answered \(self.count) times, not \(count)")
+        return
+      }
+      try? await Task.sleep(for: .milliseconds(2))
+    }
   }
 }

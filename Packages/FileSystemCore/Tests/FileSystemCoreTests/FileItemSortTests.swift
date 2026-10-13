@@ -6,13 +6,16 @@ import Testing
 
 @Suite struct FileItemSortTests {
   private func item(
-    _ name: String, kind: FileItem.Kind = .file, size: Int64? = nil, modified: TimeInterval? = nil
+    _ name: String, kind: FileItem.Kind = .file, size: Int64? = nil, modified: TimeInterval? = nil,
+    onDisk: Int64? = nil, added: TimeInterval? = nil
   ) -> FileItem {
     FileItem(
       url: URL(filePath: "/fixture/\(name)"),
       kind: kind,
       size: size,
-      modificationDate: modified.map(Date.init(timeIntervalSince1970:))
+      modificationDate: modified.map(Date.init(timeIntervalSince1970:)),
+      allocatedSize: onDisk,
+      dateAdded: added.map(Date.init(timeIntervalSince1970:))
     )
   }
 
@@ -57,6 +60,44 @@ import Testing
         == ["undated", "old", "middle", "new"])
   }
 
+  @Test func sortsBySizeOnDiskNotByLogicalSize() {
+    let items = [
+      // Large on paper and almost nothing on disk, like a sparse file.
+      item("sparse.img", size: 1_000_000, onDisk: 4_096),
+      item("packed.bin", size: 100, onDisk: 8_192),
+      item("Folder", kind: .directory),
+      item("b-tie.bin", size: 1, onDisk: 4_096),
+    ]
+    #expect(
+      names(FileItemSort(key: .sizeOnDisk).sorted(items))
+        == ["Folder", "b-tie.bin", "sparse.img", "packed.bin"])
+    #expect(
+      names(FileItemSort(key: .sizeOnDisk, ascending: false).sorted(items))
+        == ["packed.bin", "sparse.img", "b-tie.bin", "Folder"])
+  }
+
+  @Test func sortsByDateAddedWithMissingDatesOldestAndNameBreakingTies() {
+    let items = [
+      item("new", added: 3_000),
+      item("unknown"),
+      item("b-same", added: 2_000),
+      item("a-same", added: 2_000),
+      item("old", added: 1_000),
+    ]
+    #expect(
+      names(FileItemSort(key: .dateAdded).sorted(items))
+        == ["unknown", "old", "a-same", "b-same", "new"])
+  }
+
+  @Test func dateAddedIsNotTheModificationDate() {
+    let items = [
+      item("a", modified: 1_000, added: 3_000),
+      item("b", modified: 3_000, added: 1_000),
+    ]
+    #expect(names(FileItemSort(key: .modificationDate).sorted(items)) == ["a", "b"])
+    #expect(names(FileItemSort(key: .dateAdded).sorted(items)) == ["b", "a"])
+  }
+
   @Test func foldersFirstGroupsFoldersInEitherDirection() {
     let items = [
       item("b.txt"), item("Zeta", kind: .directory), item("a.txt"), item("Alpha", kind: .directory),
@@ -97,8 +138,10 @@ import Testing
         switch sort.key {
         case .name: .orderedSame
         case .size: compare(lhs.size ?? -1, rhs.size ?? -1)
+        case .sizeOnDisk: compare(lhs.allocatedSize ?? -1, rhs.allocatedSize ?? -1)
         case .modificationDate:
           compare(lhs.modificationDate ?? .distantPast, rhs.modificationDate ?? .distantPast)
+        case .dateAdded: compare(lhs.dateAdded ?? .distantPast, rhs.dateAdded ?? .distantPast)
         }
       if primary != .orderedSame {
         return (primary == .orderedAscending) == sort.ascending
@@ -114,7 +157,9 @@ import Testing
   @Test func everyKeyAndDirectionGivesTheOrderOfAPlainComparator() {
     var items = FixtureNames.unicode.enumerated().map { index, name in
       // Sizes and dates repeat, so the name has ties to break.
-      item(name, size: Int64(index % 3), modified: TimeInterval(index % 4))
+      item(
+        name, size: Int64(index % 3), modified: TimeInterval(index % 4),
+        onDisk: Int64(index % 5), added: TimeInterval(index % 6))
     }
     items += [
       item("Folder", kind: .directory),
@@ -122,7 +167,7 @@ import Testing
       FileItem(url: URL(filePath: "/fixture/b/same.txt"), kind: .file, size: 1),
       FileItem(url: URL(filePath: "/fixture/a/same.txt"), kind: .file, size: 1),
     ]
-    for key in [FileItemSort.Key.name, .size, .modificationDate] {
+    for key in [FileItemSort.Key.name, .size, .sizeOnDisk, .modificationDate, .dateAdded] {
       for ascending in [true, false] {
         for foldersFirst in [false, true] {
           let sort = FileItemSort(key: key, ascending: ascending, foldersFirst: foldersFirst)
@@ -231,6 +276,8 @@ import Testing
     #expect(await listing.differs(from: [a]))
     #expect(await listing.differs(from: []))
     #expect(await listing.differs(from: [a, item("b.txt", size: 3, modified: 20)]))
+    #expect(await listing.differs(from: [a, item("b.txt", size: 2, modified: 20, onDisk: 4_096)]))
+    #expect(await listing.differs(from: [a, item("b.txt", size: 2, modified: 20, added: 5)]))
     #expect(await listing.differs(from: [a, item("b.txt", size: 2, modified: 21)]))
   }
 

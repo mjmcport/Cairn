@@ -28,14 +28,14 @@ final class TabsTests: XCTestCase {
     app.launch()
     addTeardownBlock { @MainActor in app.terminate() }
     // Only the showing tab's list is in the window, so this is always that one.
-    let table = app.tables[AccessibilityElement.fileList.identifier]
+    let table = app.outlines[AccessibilityElement.fileList.identifier]
     XCTAssertTrue(table.staticTexts["Sub"].waitForExistence(timeout: 10))
     return (app, table, app.windows[AccessibilityElement.mainWindow.identifier])
   }
 
   @MainActor
   private func row(_ name: String, in table: XCUIElement) -> XCUIElement {
-    table.tableRows.containing(.staticText, identifier: name).firstMatch
+    table.outlineRows.containing(.staticText, identifier: name).firstMatch
   }
 
   @MainActor
