@@ -91,6 +91,9 @@ public struct BrowserHistory: Sendable, Equatable {
   /// versions. Two spellings of one folder that differ by a symbolic link,
   /// such as `/tmp` and `/private/tmp`, are therefore different places.
   static func placeKey(_ url: URL) -> String {
+    // A virtual location is told from a folder with the same path, and a tag
+    // from the recents, by its scheme.
+    let prefix = url.isFileURL ? "" : "\(url.scheme ?? ""):"
     var components: [Substring] = []
     for component in url.path(percentEncoded: false).split(separator: "/") {
       switch component {
@@ -100,6 +103,6 @@ public struct BrowserHistory: Sendable, Equatable {
       default: components.append(component)
       }
     }
-    return "/" + components.joined(separator: "/")
+    return prefix + "/" + components.joined(separator: "/")
   }
 }

@@ -166,7 +166,7 @@ public final class BrowserModel {
   /// it is told to, watches it.
   public convenience init(location: URL) {
     self.init(
-      location: location, reader: DirectoryReader(), watcher: FolderWatcher(),
+      location: location, reader: CompositeReader(), watcher: FolderWatcher(),
       settings: BrowserSettings())
   }
 
@@ -343,7 +343,9 @@ public final class BrowserModel {
   }
 
   private func startSession(for key: FolderKey, at folder: URL) {
-    guard isWatching, let watcher, sessions[key] == nil else { return }
+    // A virtual location has no folder to watch.
+    guard isWatching, let watcher, sessions[key] == nil, !VirtualLocation.isVirtual(folder)
+    else { return }
     sessionsStarted += 1
     let id = sessionsStarted
     let signals = watcher.signals(for: folder)
@@ -559,7 +561,11 @@ public final class BrowserModel {
   ///   folder that is not listed, or one that is already open.
   @discardableResult
   public func openFolder(_ key: FolderKey) -> Bool {
-    guard openFolders[key] == nil, let item = item(at: key), item.isNavigable else {
+    // A virtual location is a flat list: its names are not unique, and a
+    // folder's place in it is not a place under the location.
+    guard !isShowingVirtualLocation, openFolders[key] == nil, let item = item(at: key),
+      item.isNavigable
+    else {
       return false
     }
     folderTokens += 1
@@ -1057,8 +1063,13 @@ public final class BrowserModel {
     return true
   }
 
-  /// The folder that contains the current one, or nil at the root.
+  /// Whether the location is a tag or the recents, not a folder.
+  public var isShowingVirtualLocation: Bool { VirtualLocation.isVirtual(location) }
+
+  /// The folder that contains the current one, or nil at the root and in a
+  /// virtual location, which is inside nothing.
   public var enclosingFolder: URL? {
+    guard !isShowingVirtualLocation else { return nil }
     // The root is recognized by its path, not by asking for its parent: on
     // macOS 15 the parent of "/" comes back as "/..", which is not "/".
     let path = BrowserHistory.placeKey(location)

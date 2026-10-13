@@ -78,6 +78,20 @@ extension AccessibilityElement {
     identifier: "close-tab", label: "Close Tab")
   public static let newTabButton = AccessibilityElement(
     identifier: "new-tab", label: "New Tab")
+  public static let sidebar = AccessibilityElement(
+    identifier: "sidebar", label: "Sidebar")
+  /// Every section header shares this identifier, as list cells share
+  /// theirs. A header speaks its own name.
+  public static let sidebarHeader = AccessibilityElement(
+    identifier: "sidebar-header", label: "Section")
+  /// Every place in the sidebar shares this identifier. A row speaks its
+  /// name, and says when its folder cannot be found.
+  public static let sidebarItem = AccessibilityElement(
+    identifier: "sidebar-item", label: "Place")
+  /// Every eject button shares this identifier. See `apply(_:for:)` for
+  /// what it speaks: "Eject Backup".
+  public static let ejectButton = AccessibilityElement(
+    identifier: "eject-button", label: "Eject")
   public static let settingsWindow = AccessibilityElement(
     identifier: "settings-window", label: "Settings")
   /// The view that hosts the Settings window's content. The audit reports a
@@ -95,7 +109,7 @@ extension AccessibilityElement {
     .mainWindow, .browserView, .fileList, .browserStatus, .nameCell, .sizeCell, .sizeOnDiskCell,
     .modifiedCell, .addedCell, .iconView, .iconCell, .columnBrowser, .preview, .previewName,
     .previewFact, .backButton, .forwardButton, .tabBar, .tab,
-    .closeTabButton,
+    .closeTabButton, .sidebar, .sidebarHeader, .sidebarItem, .ejectButton,
     .newTabButton, .settingsWindow,
     .settingsContent, .rememberOpenFoldersToggle,
   ]

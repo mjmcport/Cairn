@@ -116,6 +116,11 @@ public final class BrowserViewController: NSViewController {
   /// folder has been listed.
   public var onTitleChange: (() -> Void)?
 
+  /// Called on the main actor when the place being shown changes, as it is
+  /// made and before it has been listed. The sidebar follows it.
+  public var onLocationChange: (() -> Void)?
+  private var reportedLocation: URL?
+
   /// A browser on the real file system, which lists its folder and, while
   /// its owner says it is on screen, watches it.
   public convenience init(location: URL) {
@@ -265,6 +270,24 @@ public final class BrowserViewController: NSViewController {
   @objc public func goToEnclosingFolder(_ sender: Any?) {
     // At the root there is nowhere to go, so a load under way is left to finish.
     guard model.moveToEnclosingFolder() else { return }
+    movedAway()
+    run { await $0.load() }
+  }
+
+  /// The folder File > Add to Sidebar would add: the selected folder, or with
+  /// no folder selected, the one being shown. Nil in a tag or the recents
+  /// with no folder selected.
+  public var folderToAdd: URL? {
+    let selected = model.selectedItems
+    if selected.count == 1, selected[0].isNavigable { return selected[0].url }
+    guard selected.isEmpty, !model.isShowingVirtualLocation else { return nil }
+    return model.location
+  }
+
+  /// Shows `location` in this tab as a move, as a command does: history, the
+  /// title and the toolbar follow, and Back returns. Asked by the sidebar.
+  public func show(_ location: URL) {
+    guard model.move(to: location) else { return }
     movedAway()
     run { await $0.load() }
   }
@@ -601,6 +624,10 @@ public final class BrowserViewController: NSViewController {
   /// hears before the listing starts; a model change calls it for a move
   /// made on the model directly.
   private func updateTitle() {
+    if reportedLocation.map({ !BrowserHistory.isSamePlace($0, model.location) }) ?? true {
+      reportedLocation = model.location
+      onLocationChange?()
+    }
     let folderName = Self.title(for: model.location)
     guard folderName != title else { return }
     title = folderName
@@ -608,7 +635,8 @@ public final class BrowserViewController: NSViewController {
   }
 
   static func title(for location: URL) -> String {
-    location.path == "/" ? "/" : location.lastPathComponent
+    if let virtual = VirtualLocation(url: location) { return virtual.title }
+    return location.path == "/" ? "/" : location.lastPathComponent
   }
 
   /// Shown where an item has no value, as Finder does for a folder's size.
@@ -761,7 +789,8 @@ extension BrowserViewController: NSOutlineViewDataSource, NSOutlineViewDelegate 
   }
 
   public func outlineView(_ outlineView: NSOutlineView, isItemExpandable item: Any) -> Bool {
-    (item as? OutlineNode)?.item?.isNavigable ?? false
+    guard !model.isShowingVirtualLocation else { return false }
+    return (item as? OutlineNode)?.item?.isNavigable ?? false
   }
 
   public func outlineView(_ outlineView: NSOutlineView, shouldSelectItem item: Any) -> Bool {

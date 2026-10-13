@@ -47,6 +47,14 @@ enum MainMenu {
       action: #selector(BrowserViewController.openSelection(_:)),
       keyEquivalent: "o"
     )
+    // No target: the window's content offers the selected folder, or the
+    // one being shown, to the sidebar.
+    let addToSidebar = fileMenu.addItem(
+      withTitle: "Add to Sidebar",
+      action: #selector(WindowContentViewController.addToSidebar(_:)),
+      keyEquivalent: "t"
+    )
+    addToSidebar.keyEquivalentModifierMask = [.control, .command]
     fileMenu.addItem(.separator())
     // The pane closes its showing tab, and the window with its last tab. With
     // no pane in the chain the app delegate closes the key window.
@@ -105,6 +113,15 @@ enum MainMenu {
       action: #selector(BrowserViewController.toggleFoldersFirst(_:)),
       keyEquivalent: ""
     )
+    // The split view controller handles this, and titles the item Show or
+    // Hide as the sidebar is.
+    let sidebarItem = viewMenu.addItem(
+      withTitle: "Hide Sidebar",
+      action: #selector(NSSplitViewController.toggleSidebar(_:)),
+      keyEquivalent: "s"
+    )
+    sidebarItem.keyEquivalentModifierMask = [.option, .command]
+    viewMenu.insertItem(.separator(), at: viewMenu.index(of: sidebarItem))
     mainMenu.addItem(submenuItem(titled: "View", menu: viewMenu))
 
     let windowMenu = NSMenu(title: "Window")
