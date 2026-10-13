@@ -203,6 +203,24 @@ final class AccessibilityTests: XCTestCase {
   }
 
   @MainActor
+  func testAuditPassesWithTheFolderShownAsIcons() throws {
+    let app = launch(on: tree.root.path)
+    XCTAssertTrue(
+      app.outlines[AccessibilityElement.fileList.identifier].staticTexts["alpha.txt"]
+        .waitForExistence(timeout: 10))
+    app.typeKey("2", modifierFlags: .command)
+    let icons = app.collectionViews[AccessibilityElement.iconView.identifier]
+    XCTAssertTrue(icons.waitForExistence(timeout: 10))
+    XCTAssertEqual(icons.label, AccessibilityElement.iconView.label)
+    // A cell is one element that speaks the name and kind of its item.
+    let cell = icons.groups.matching(
+      NSPredicate(format: "label == %@", "alpha.txt, file")
+    ).firstMatch
+    XCTAssertTrue(cell.waitForExistence(timeout: 10))
+    try audit(app, "Icon view")
+  }
+
+  @MainActor
   func testAuditPassesOnTheSettingsWindowAndItsCheckboxIsFoundByIdentifier() throws {
     let app = launch(on: tree.root.path)
     XCTAssertTrue(

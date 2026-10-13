@@ -26,6 +26,11 @@ public struct FileItem: Sendable, Hashable, Identifiable {
   /// When the item was added to its folder, which is not when it was
   /// created or changed, or `nil` when the volume does not say.
   public let dateAdded: Date?
+  /// Whether the file's contents are not on this Mac: a placeholder that a
+  /// cloud service fills in when the file is opened. Anything that reads the
+  /// contents, a thumbnail included, can make the system download it, so
+  /// nothing reads an online-only file to draw it.
+  public let isOnlineOnly: Bool
 
   public var id: URL { url }
 
@@ -42,7 +47,8 @@ public struct FileItem: Sendable, Hashable, Identifiable {
     size: Int64? = nil,
     modificationDate: Date? = nil,
     allocatedSize: Int64? = nil,
-    dateAdded: Date? = nil
+    dateAdded: Date? = nil,
+    isOnlineOnly: Bool = false
   ) {
     self.url = url
     self.kind = kind
@@ -51,6 +57,7 @@ public struct FileItem: Sendable, Hashable, Identifiable {
     self.modificationDate = modificationDate
     self.allocatedSize = allocatedSize
     self.dateAdded = dateAdded
+    self.isOnlineOnly = isOnlineOnly
   }
 }
 
@@ -75,14 +82,34 @@ extension FileItem {
       } else {
         .file
       }
+    let size = kind == .file ? values.fileSize.map(Int64.init) : nil
+    let allocatedSize = kind == .file ? values.totalFileAllocatedSize.map(Int64.init) : nil
     self.init(
       url: url,
       kind: kind,
       isHidden: values.isHidden ?? false,
-      size: kind == .file ? values.fileSize.map(Int64.init) : nil,
+      size: size,
       modificationDate: values.contentModificationDate,
-      allocatedSize: kind == .file ? values.totalFileAllocatedSize.map(Int64.init) : nil,
-      dateAdded: values.addedToDirectoryDate
+      allocatedSize: allocatedSize,
+      dateAdded: values.addedToDirectoryDate,
+      isOnlineOnly: kind == .file
+        && Self.isOnlineOnly(size: size, allocatedSize: allocatedSize, downloadingStatus: nil)
     )
+  }
+
+  /// Whether a regular file is online only. A file that a cloud service has
+  /// not downloaded reports a logical size and no allocated blocks. A sparse
+  /// file looks the same, which is the price of not asking anything more.
+  ///
+  /// The iCloud downloading status says it outright, but reading it for every
+  /// item of a listing multiplied the time to list 10,000 items by nine (0.06
+  /// s to 0.53 s) and 100,000 by ten, so the listing does not read it. A
+  /// caller that has few items to ask about may pass it.
+  static func isOnlineOnly(
+    size: Int64?, allocatedSize: Int64?, downloadingStatus: URLUbiquitousItemDownloadingStatus?
+  ) -> Bool {
+    if downloadingStatus == .notDownloaded { return true }
+    guard let size, let allocatedSize else { return false }
+    return size > 0 && allocatedSize == 0
   }
 }

@@ -27,6 +27,18 @@ public final class BrowserModel {
     /// The sort changed and every level was put in the new order. The
     /// selection is where it was and is worth scrolling into view.
     case resort
+    /// The way the folder is presented changed. The items, the selection and
+    /// the location are as they were.
+    case mode
+  }
+
+  /// How a folder is presented. The model's items, selection and sort are
+  /// the same for both; only what is shown of them differs.
+  public enum ViewMode: Sendable, Equatable {
+    /// An outline of rows, in which folders open in place.
+    case list
+    /// A grid of pictures and names, in which a folder is entered.
+    case icons
   }
 
   /// Back and forward history. `history.current` is the folder being shown.
@@ -41,6 +53,8 @@ public final class BrowserModel {
 
   public var showsHiddenFiles = false
   public var sort = FileItemSort()
+  /// How this browser is presented. A tab's own, like its history.
+  public private(set) var viewMode = ViewMode.list
 
   /// Called on the main actor whenever the location, items, state or a
   /// restored selection changes.
@@ -775,6 +789,29 @@ public final class BrowserModel {
     selection.formUnion(found)
     selectionBaseline = selection
     pendingSelection = pendingSelection.filter { resolveSelection([$0]).isEmpty }
+  }
+
+  // MARK: Mode
+
+  /// Shows the folder as `mode`. Switching to icons closes every folder that
+  /// is open in place, because the icon view shows the top level only and a
+  /// selection a person cannot see would be a selection nobody can change:
+  /// what was selected inside a folder falls back to the folder, as when the
+  /// user closes it. Nothing is listed again and history is untouched.
+  public func setViewMode(_ mode: ViewMode) {
+    guard mode != viewMode else { return }
+    viewMode = mode
+    if mode == .icons {
+      for key in openFolders.keys where key.depth == 1 {
+        let folderURL = item(at: key)?.url
+        let dropped = removeFolder(key)
+        if !selection.isDisjoint(with: dropped) {
+          selection.subtract(dropped)
+          if let folderURL { selection.insert(folderURL) }
+        }
+      }
+    }
+    publish(.mode)
   }
 
   // MARK: Sort

@@ -1,4 +1,5 @@
 import AppKit
+import FileMetadata
 import FileSystemCore
 
 /// Shows the contents of one folder as an outline with name, size, size on
@@ -80,6 +81,15 @@ public final class BrowserViewController: NSViewController {
 
   private let outlineView = NSOutlineView()
   private let scrollView = NSScrollView()
+  /// The icon presentation, which is on screen in place of the outline while
+  /// the model's mode is icons. Both read the same model.
+  private let iconView = IconCollectionView()
+  private let iconScrollView = NSScrollView()
+  private let genericIcons = GenericIcons()
+  private var typeAhead = TypeAhead()
+  /// Makes the pictures of the icon presentation. Tests replace it before the
+  /// view loads, to stand in for the system's thumbnail generator.
+  var thumbnailLoader = ThumbnailLoader(provider: QuickLookThumbnailer())
   private let statusLabel = NSTextField(wrappingLabelWithString: "")
   /// The model action in flight, if any. Tests await it.
   private(set) var loadTask: Task<Void, Never>?
@@ -171,13 +181,38 @@ public final class BrowserViewController: NSViewController {
     statusLabel.isHidden = true
     statusLabel.translatesAutoresizingMaskIntoConstraints = false
 
+    let layout = NSCollectionViewFlowLayout()
+    layout.itemSize = IconItem.cellSize
+    layout.minimumInteritemSpacing = 8
+    layout.minimumLineSpacing = 8
+    layout.sectionInset = NSEdgeInsets(top: 12, left: 12, bottom: 12, right: 12)
+    iconView.collectionViewLayout = layout
+    iconView.register(IconItem.self, forItemWithIdentifier: IconItem.reuseIdentifier)
+    iconView.dataSource = self
+    iconView.delegate = self
+    iconView.isSelectable = true
+    iconView.allowsMultipleSelection = true
+    iconView.backgroundColors = [.controlBackgroundColor]
+    iconView.apply(.iconView)
+    iconView.onType = { [weak self] text, time in self?.typed(text, at: time) }
+    iconView.onOpen = { [weak self] in self?.openSelection(nil) }
+    iconScrollView.documentView = iconView
+    iconScrollView.hasVerticalScroller = true
+    iconScrollView.translatesAutoresizingMaskIntoConstraints = false
+    iconScrollView.isHidden = true
+
     container.addSubview(scrollView)
+    container.addSubview(iconScrollView)
     container.addSubview(statusLabel)
     NSLayoutConstraint.activate([
       scrollView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
       scrollView.trailingAnchor.constraint(equalTo: container.trailingAnchor),
       scrollView.topAnchor.constraint(equalTo: container.topAnchor),
       scrollView.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+      iconScrollView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+      iconScrollView.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+      iconScrollView.topAnchor.constraint(equalTo: container.topAnchor),
+      iconScrollView.bottomAnchor.constraint(equalTo: container.bottomAnchor),
       statusLabel.centerXAnchor.constraint(equalTo: container.centerXAnchor),
       statusLabel.centerYAnchor.constraint(equalTo: container.centerYAnchor),
       statusLabel.widthAnchor.constraint(lessThanOrEqualTo: container.widthAnchor, constant: -40),
@@ -202,7 +237,12 @@ public final class BrowserViewController: NSViewController {
 
   /// Opens the selected item. Sent by File > Open through the responder chain.
   @objc public func openSelection(_ sender: Any?) {
-    open(row: outlineView.selectedRow)
+    if model.viewMode == .icons {
+      guard let item = singleSelectedIconItem else { return }
+      openItem(item)
+    } else {
+      open(row: outlineView.selectedRow)
+    }
   }
 
   /// Shows the folder that contains the current one. Sent by Go > Enclosing Folder.
@@ -236,12 +276,26 @@ public final class BrowserViewController: NSViewController {
     model.changeSort(to: sort)
   }
 
+  /// Shows the folder as rows. Sent by View > as List.
+  @objc public func showAsList(_ sender: Any?) {
+    model.setViewMode(.list)
+  }
+
+  /// Shows the folder as icons. Sent by View > as Icons.
+  @objc public func showAsIcons(_ sender: Any?) {
+    model.setViewMode(.icons)
+  }
+
   @objc private func openClickedRow(_ sender: Any?) {
     open(row: outlineView.clickedRow)
   }
 
   private func open(row: Int) {
     guard row >= 0, let item = (outlineView.item(atRow: row) as? OutlineNode)?.item else { return }
+    openItem(item)
+  }
+
+  private func openItem(_ item: FileItem) {
     // Opening a file does nothing yet, so a load under way is left to finish.
     guard item.isNavigable else { return }
     model.move(to: item.url)
@@ -249,10 +303,26 @@ public final class BrowserViewController: NSViewController {
     run { await $0.load() }
   }
 
+  /// The one selected item of the icon presentation, or nil.
+  private var singleSelectedIconItem: FileItem? {
+    let selected = model.items.filter { model.selection.contains($0.url) }
+    return selected.count == 1 ? selected[0] : nil
+  }
+
+  /// Typing in the icon presentation selects the first name that starts with
+  /// what has been typed, as it does in the list.
+  private func typed(_ text: String, at time: TimeInterval) {
+    let prefix = typeAhead.type(text, at: time)
+    guard let index = TypeAhead.match(prefix, in: model.items.map(\.name)) else { return }
+    let item = model.items[index]
+    model.selection = [item.url]
+    applyIconSelection(scrollingToIt: true)
+  }
+
   /// Puts keyboard focus in the file list. Does nothing while the browser's
   /// view is not in a window.
   public func focusList() {
-    view.window?.makeFirstResponder(outlineView)
+    view.window?.makeFirstResponder(model.viewMode == .icons ? iconView : outlineView)
   }
 
   /// Watches the folder being shown, and each folder the browser moves to,
@@ -291,6 +361,7 @@ public final class BrowserViewController: NSViewController {
 
   private func modelDidChange() {
     updateTitle()
+    showTheModesView()
     switch model.lastPublish {
     case .load:
       reloadEverything()
@@ -301,7 +372,7 @@ public final class BrowserViewController: NSViewController {
       reloadEverything()
       applyModelSelection(scrollingToIt: false)
     case .folder:
-      if let key = model.lastChangedFolder {
+      if let key = model.lastChangedFolder, model.viewMode == .list {
         reloadFolder(key)
       } else {
         reloadEverything()
@@ -311,6 +382,9 @@ public final class BrowserViewController: NSViewController {
       reloadEverything()
       updateSortIndicator()
       applyModelSelection(scrollingToIt: true)
+    case .mode:
+      reloadEverything()
+      applyModelSelection(scrollingToIt: false)
     }
     view.window?.validateToolbarItems()
 
@@ -340,6 +414,11 @@ public final class BrowserViewController: NSViewController {
   private func reloadEverything() {
     isApplyingModelState = true
     defer { isApplyingModelState = false }
+    guard model.viewMode == .list else {
+      // The outline is not on screen; it is reloaded when the list returns.
+      iconView.reloadData()
+      return
+    }
     itemNodes.removeAll()
     statusNodes.removeAll()
     outlineView.reloadData()
@@ -385,6 +464,10 @@ public final class BrowserViewController: NSViewController {
   /// Selects the rows the model says are selected and, when asked, scrolls
   /// the first into view.
   private func applyModelSelection(scrollingToIt: Bool) {
+    if model.viewMode == .icons {
+      applyIconSelection(scrollingToIt: scrollingToIt)
+      return
+    }
     isApplyingModelState = true
     defer { isApplyingModelState = false }
 
@@ -407,6 +490,45 @@ public final class BrowserViewController: NSViewController {
     if scrollingToIt, let first = rows.first {
       outlineView.scrollRowToVisible(first)
     }
+  }
+
+  /// Puts the outline or the icons on screen, whichever the model's mode
+  /// says, and keeps keyboard focus in the list that is showing.
+  private func showTheModesView() {
+    let icons = model.viewMode == .icons
+    guard iconScrollView.isHidden == icons else { return }
+    let hadFocus = view.window?.firstResponder === (icons ? outlineView : iconView)
+    scrollView.isHidden = icons
+    iconScrollView.isHidden = !icons
+    if hadFocus { focusList() }
+  }
+
+  /// Selects the cells of the model's selected items and, when asked,
+  /// scrolls the first into view.
+  private func applyIconSelection(scrollingToIt: Bool) {
+    isApplyingModelState = true
+    defer { isApplyingModelState = false }
+    let selected = model.selection
+    var paths = Set<IndexPath>()
+    if !selected.isEmpty {
+      for (index, item) in model.items.enumerated() where selected.contains(item.url) {
+        paths.insert(IndexPath(item: index, section: 0))
+      }
+    }
+    iconView.selectionIndexPaths = paths
+    if scrollingToIt, let first = paths.min() {
+      iconView.scrollToItems(at: [first], scrollPosition: .nearestHorizontalEdge)
+    }
+  }
+
+  /// Writes what the icon view has selected to the model.
+  private func iconSelectionChanged() {
+    guard !isApplyingModelState else { return }
+    let items = model.items
+    model.selection = Set(
+      iconView.selectionIndexPaths.compactMap {
+        items.indices.contains($0.item) ? items[$0.item].url : nil
+      })
   }
 
   /// Shows the model's sort in the column headers.
@@ -532,9 +654,18 @@ extension BrowserViewController: NSUserInterfaceValidations {
     case #selector(goToEnclosingFolder(_:)):
       return model.enclosingFolder != nil
     case #selector(openSelection(_:)):
+      if model.viewMode == .icons {
+        return singleSelectedIconItem?.isNavigable == true
+      }
       guard outlineView.selectedRowIndexes.count == 1 else { return false }
       let node = outlineView.item(atRow: outlineView.selectedRow) as? OutlineNode
       return node?.item?.isNavigable == true
+    case #selector(showAsList(_:)):
+      (item as? NSMenuItem)?.state = model.viewMode == .list ? .on : .off
+      return true
+    case #selector(showAsIcons(_:)):
+      (item as? NSMenuItem)?.state = model.viewMode == .icons ? .on : .off
+      return true
     case #selector(toggleFoldersFirst(_:)):
       (item as? NSMenuItem)?.state = model.sort.foldersFirst ? .on : .off
       return true
@@ -662,5 +793,54 @@ extension BrowserViewController: NSOutlineViewDataSource, NSOutlineViewDelegate 
     model.changeSort(
       to: FileItemSort(
         key: column.sortKey, ascending: first.ascending, foldersFirst: model.sort.foldersFirst))
+  }
+}
+
+extension BrowserViewController: NSCollectionViewDataSource, NSCollectionViewDelegate {
+  public func collectionView(
+    _ collectionView: NSCollectionView, numberOfItemsInSection section: Int
+  ) -> Int {
+    model.items.count
+  }
+
+  public func collectionView(
+    _ collectionView: NSCollectionView, itemForRepresentedObjectAt indexPath: IndexPath
+  ) -> NSCollectionViewItem {
+    let cell = collectionView.makeItem(withIdentifier: IconItem.reuseIdentifier, for: indexPath)
+    // A stale index, as the outline can be asked for: the cell stays empty
+    // and the reload that follows replaces it.
+    guard let icon = cell as? IconItem, model.items.indices.contains(indexPath.item) else {
+      return cell
+    }
+    let item = model.items[indexPath.item]
+    icon.configure(item: item, icon: genericIcons.icon(for: item))
+    return icon
+  }
+
+  public func collectionView(
+    _ collectionView: NSCollectionView, willDisplay item: NSCollectionViewItem,
+    forRepresentedObjectAt indexPath: IndexPath
+  ) {
+    let scale = view.window?.backingScaleFactor ?? NSScreen.main?.backingScaleFactor ?? 2
+    (item as? IconItem)?.startLoading(with: thumbnailLoader, scale: scale)
+  }
+
+  public func collectionView(
+    _ collectionView: NSCollectionView, didEndDisplaying item: NSCollectionViewItem,
+    forRepresentedObjectAt indexPath: IndexPath
+  ) {
+    (item as? IconItem)?.stopLoading()
+  }
+
+  public func collectionView(
+    _ collectionView: NSCollectionView, didSelectItemsAt indexPaths: Set<IndexPath>
+  ) {
+    iconSelectionChanged()
+  }
+
+  public func collectionView(
+    _ collectionView: NSCollectionView, didDeselectItemsAt indexPaths: Set<IndexPath>
+  ) {
+    iconSelectionChanged()
   }
 }
