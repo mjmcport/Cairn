@@ -14,6 +14,13 @@ enum MainMenu {
       keyEquivalent: ""
     )
     appMenu.addItem(.separator())
+    // No target: it travels the responder chain to the app delegate.
+    appMenu.addItem(
+      withTitle: "Settings\u{2026}",
+      action: #selector(AppDelegate.showSettings(_:)),
+      keyEquivalent: ","
+    )
+    appMenu.addItem(.separator())
     appMenu.addItem(
       withTitle: "Hide Cairn",
       action: #selector(NSApplication.hide(_:)),
@@ -74,6 +81,15 @@ enum MainMenu {
     )
     enclosingFolder.keyEquivalentModifierMask = [.command]
     mainMenu.addItem(submenuItem(titled: "Go", menu: goMenu))
+
+    // Like the Go commands, View has no target: it reaches the showing browser.
+    let viewMenu = NSMenu()
+    viewMenu.addItem(
+      withTitle: "Keep Folders on Top",
+      action: #selector(BrowserViewController.toggleFoldersFirst(_:)),
+      keyEquivalent: ""
+    )
+    mainMenu.addItem(submenuItem(titled: "View", menu: viewMenu))
 
     let windowMenu = NSMenu(title: "Window")
     windowMenu.addItem(

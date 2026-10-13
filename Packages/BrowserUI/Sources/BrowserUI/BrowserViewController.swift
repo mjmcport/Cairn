@@ -1,8 +1,9 @@
 import AppKit
 import FileSystemCore
 
-/// Shows the contents of one folder as a list with name, size and modified
-/// date. Every tab of a pane is one of these.
+/// Shows the contents of one folder as an outline with name, size, size on
+/// disk, modified date and date added. A folder can be opened in place, and
+/// its items are then listed beneath it. Every tab of a pane is one of these.
 ///
 /// A browser does not know whether it is the tab that is showing, so it
 /// leaves the window's title and keyboard focus to its owner: it keeps its
@@ -10,7 +11,7 @@ import FileSystemCore
 @MainActor
 public final class BrowserViewController: NSViewController {
   enum Column: String, CaseIterable {
-    case name, size, modified
+    case name, size, sizeOnDisk, modified, added
 
     var identifier: NSUserInterfaceItemIdentifier { .init("column-\(rawValue)") }
 
@@ -18,7 +19,9 @@ public final class BrowserViewController: NSViewController {
       switch self {
       case .name: "Name"
       case .size: "Size"
+      case .sizeOnDisk: "Size on Disk"
       case .modified: "Date Modified"
+      case .added: "Date Added"
       }
     }
 
@@ -26,7 +29,9 @@ public final class BrowserViewController: NSViewController {
       switch self {
       case .name: .nameCell
       case .size: .sizeCell
+      case .sizeOnDisk: .sizeOnDiskCell
       case .modified: .modifiedCell
+      case .added: .addedCell
       }
     }
 
@@ -35,29 +40,58 @@ public final class BrowserViewController: NSViewController {
       switch self {
       case .name: "No name"
       case .size: "No size"
+      case .sizeOnDisk: "No size on disk"
       case .modified: "No date"
+      case .added: "No date added"
       }
     }
 
+    /// The starting widths. Together with the table's spacing they fit the
+    /// window's default width, so no column hangs outside it and the list
+    /// needs no horizontal scroller; the Name column takes any width the
+    /// window gains.
     var width: CGFloat {
       switch self {
-      case .name: 420
-      case .size: 110
-      case .modified: 200
+      case .name: 240
+      case .size: 80
+      case .sizeOnDisk: 90
+      case .modified: 160
+      case .added: 160
       }
+    }
+
+    /// The order the column sorts by.
+    var sortKey: FileItemSort.Key {
+      switch self {
+      case .name: .name
+      case .size: .size
+      case .sizeOnDisk: .sizeOnDisk
+      case .modified: .modificationDate
+      case .added: .dateAdded
+      }
+    }
+
+    init(sortKey: FileItemSort.Key) {
+      self = Self.allCases.first { $0.sortKey == sortKey } ?? .name
     }
   }
 
   public let model: BrowserModel
 
-  private let tableView = NSTableView()
+  private let outlineView = NSOutlineView()
   private let scrollView = NSScrollView()
   private let statusLabel = NSTextField(wrappingLabelWithString: "")
   /// The model action in flight, if any. Tests await it.
   private(set) var loadTask: Task<Void, Never>?
-  /// True while the table's selection is being set from the model, so the
-  /// change is not written back as if the user had made it.
-  private var isApplyingModelSelection = false
+  /// True while the outline's selection, expansion or sort indicator is
+  /// being set from the model, so the change is not written back as if the
+  /// user had made it.
+  private var isApplyingModelState = false
+  /// The handle of each row, kept so a row is the same object each time
+  /// AppKit asks for it. A node's item is replaced in place when the model
+  /// lists it again.
+  private var itemNodes: [FolderKey: OutlineNode] = [:]
+  private var statusNodes: [FolderKey: OutlineNode] = [:]
 
   public var location: URL { model.location }
 
@@ -102,18 +136,26 @@ public final class BrowserViewController: NSViewController {
       tableColumn.title = column.title
       tableColumn.width = column.width
       tableColumn.minWidth = 60
-      tableView.addTableColumn(tableColumn)
+      tableColumn.resizingMask =
+        column == .name ? [.autoresizingMask, .userResizingMask] : .userResizingMask
+      tableColumn.sortDescriptorPrototype = NSSortDescriptor(key: column.rawValue, ascending: true)
+      outlineView.addTableColumn(tableColumn)
+      if column == .name {
+        // The triangles and the indentation are drawn in this column.
+        outlineView.outlineTableColumn = tableColumn
+      }
     }
-    tableView.apply(.fileList)
-    tableView.style = .fullWidth
-    tableView.usesAlternatingRowBackgroundColors = true
-    tableView.allowsMultipleSelection = true
-    tableView.dataSource = self
-    tableView.delegate = self
-    tableView.target = self
-    tableView.doubleAction = #selector(openClickedRow(_:))
+    outlineView.columnAutoresizingStyle = .firstColumnOnlyAutoresizingStyle
+    outlineView.apply(.fileList)
+    outlineView.style = .fullWidth
+    outlineView.usesAlternatingRowBackgroundColors = true
+    outlineView.allowsMultipleSelection = true
+    outlineView.dataSource = self
+    outlineView.delegate = self
+    outlineView.target = self
+    outlineView.doubleAction = #selector(openClickedRow(_:))
 
-    scrollView.documentView = tableView
+    scrollView.documentView = outlineView
     scrollView.hasVerticalScroller = true
     scrollView.hasHorizontalScroller = true
     scrollView.translatesAutoresizingMaskIntoConstraints = false
@@ -146,6 +188,7 @@ public final class BrowserViewController: NSViewController {
   public override func viewDidLoad() {
     super.viewDidLoad()
     model.onChange = { [weak self] in self?.modelDidChange() }
+    updateSortIndicator()
     modelDidChange()
     run { await $0.load() }
   }
@@ -159,14 +202,14 @@ public final class BrowserViewController: NSViewController {
 
   /// Opens the selected item. Sent by File > Open through the responder chain.
   @objc public func openSelection(_ sender: Any?) {
-    open(row: tableView.selectedRow)
+    open(row: outlineView.selectedRow)
   }
 
   /// Shows the folder that contains the current one. Sent by Go > Enclosing Folder.
   @objc public func goToEnclosingFolder(_ sender: Any?) {
     // At the root there is nowhere to go, so a load under way is left to finish.
     guard model.moveToEnclosingFolder() else { return }
-    updateTitle()
+    movedAway()
     run { await $0.load() }
   }
 
@@ -174,35 +217,42 @@ public final class BrowserViewController: NSViewController {
   @objc public func goBack(_ sender: Any?) {
     // With no history there is nowhere to go, so a load under way is left to finish.
     guard model.moveBack() else { return }
-    updateTitle()
+    movedAway()
     run { await $0.load() }
   }
 
   /// Undoes Back. Sent by Go > Forward and the toolbar.
   @objc public func goForward(_ sender: Any?) {
     guard model.moveForward() else { return }
-    updateTitle()
+    movedAway()
     run { await $0.load() }
   }
 
+  /// Groups folders ahead of files at every level, or stops doing so. Sent
+  /// by View > Keep Folders on Top.
+  @objc public func toggleFoldersFirst(_ sender: Any?) {
+    var sort = model.sort
+    sort.foldersFirst.toggle()
+    model.changeSort(to: sort)
+  }
+
   @objc private func openClickedRow(_ sender: Any?) {
-    open(row: tableView.clickedRow)
+    open(row: outlineView.clickedRow)
   }
 
   private func open(row: Int) {
-    guard model.items.indices.contains(row) else { return }
-    let item = model.items[row]
+    guard row >= 0, let item = (outlineView.item(atRow: row) as? OutlineNode)?.item else { return }
     // Opening a file does nothing yet, so a load under way is left to finish.
     guard item.isNavigable else { return }
     model.move(to: item.url)
-    updateTitle()
+    movedAway()
     run { await $0.load() }
   }
 
   /// Puts keyboard focus in the file list. Does nothing while the browser's
   /// view is not in a window.
   public func focusList() {
-    view.window?.makeFirstResponder(tableView)
+    view.window?.makeFirstResponder(outlineView)
   }
 
   /// Watches the folder being shown, and each folder the browser moves to,
@@ -241,10 +291,27 @@ public final class BrowserViewController: NSViewController {
 
   private func modelDidChange() {
     updateTitle()
-    tableView.reloadData()
-    // A refresh leaves the list where the user is looking: the selection is
-    // put back on the same items, and nothing scrolls.
-    applyModelSelection(scrollingToIt: model.lastPublish != .refresh)
+    switch model.lastPublish {
+    case .load:
+      reloadEverything()
+      applyModelSelection(scrollingToIt: true)
+    case .refresh:
+      // A refresh leaves the list where the user is looking: the selection
+      // is put back on the same items, and nothing scrolls.
+      reloadEverything()
+      applyModelSelection(scrollingToIt: false)
+    case .folder:
+      if let key = model.lastChangedFolder {
+        reloadFolder(key)
+      } else {
+        reloadEverything()
+      }
+      applyModelSelection(scrollingToIt: false)
+    case .resort:
+      reloadEverything()
+      updateSortIndicator()
+      applyModelSelection(scrollingToIt: true)
+    }
     view.window?.validateToolbarItems()
 
     switch model.state {
@@ -259,18 +326,97 @@ public final class BrowserViewController: NSViewController {
     }
   }
 
+  /// A command has moved the model, which has emptied its rows and will not
+  /// publish until the listing starts. The outline is told now: it keeps the
+  /// counts it was given and may ask for a row by an index that no longer
+  /// exists, as AppKit on macOS 15 was seen to.
+  private func movedAway() {
+    updateTitle()
+    reloadEverything()
+  }
+
+  /// Reloads every row. The scroll offset and keyboard focus are kept by the
+  /// outline; folders that are open are opened again from the model.
+  private func reloadEverything() {
+    isApplyingModelState = true
+    defer { isApplyingModelState = false }
+    itemNodes.removeAll()
+    statusNodes.removeAll()
+    outlineView.reloadData()
+    openFoldersTheModelHasOpen()
+  }
+
+  /// Reloads one folder's rows and nothing else, and opens or closes the
+  /// folder to match the model.
+  private func reloadFolder(_ key: FolderKey) {
+    guard !key.isRoot, let node = itemNodes[key] else {
+      // Never asked for by the outline, so there is nothing of it to reload;
+      // the folder is opened below, from the model.
+      reloadEverything()
+      return
+    }
+    isApplyingModelState = true
+    defer { isApplyingModelState = false }
+    // The handles of everything beneath the folder are asked for again.
+    for other in itemNodes.keys where other != key && other.isInside(key) {
+      itemNodes[other] = nil
+    }
+    for other in statusNodes.keys where other.isInside(key) {
+      statusNodes[other] = nil
+    }
+    if !model.isOpen(key), outlineView.isItemExpanded(node) {
+      outlineView.collapseItem(node)
+    }
+    outlineView.reloadItem(node, reloadChildren: true)
+    openFoldersTheModelHasOpen()
+  }
+
+  /// Opens, parent before child, each folder the model says is open and the
+  /// outline shows closed. Never writes back to the model.
+  private func openFoldersTheModelHasOpen() {
+    for key in model.openFolderKeys {
+      // AppKit asks for the handles of the rows it draws, so a folder far
+      // down a long list may not have one yet: it is made from the model.
+      guard let handle = handle(for: key), !outlineView.isItemExpanded(handle) else { continue }
+      outlineView.expandItem(handle)
+    }
+  }
+
   /// Selects the rows the model says are selected and, when asked, scrolls
   /// the first into view.
   private func applyModelSelection(scrollingToIt: Bool) {
-    isApplyingModelSelection = true
-    defer { isApplyingModelSelection = false }
+    isApplyingModelState = true
+    defer { isApplyingModelState = false }
 
-    let rows = IndexSet(
-      model.items.indices.filter { model.selection.contains(model.items[$0].url) })
-    tableView.selectRowIndexes(rows, byExtendingSelection: false)
-    if scrollingToIt, let first = rows.first {
-      tableView.scrollRowToVisible(first)
+    var rows = IndexSet()
+    let selected = model.selection
+    if !selected.isEmpty {
+      func collect(_ items: [FileItem], in folder: FolderKey) {
+        for item in items where selected.contains(item.url) {
+          let node = node(for: folder.appending(item.name), item: item)
+          let row = outlineView.row(forItem: node)
+          if row >= 0 { rows.insert(row) }
+        }
+      }
+      collect(model.items, in: .root)
+      for key in model.openFolderKeys {
+        collect(model.children(of: key), in: key)
+      }
     }
+    outlineView.selectRowIndexes(rows, byExtendingSelection: false)
+    if scrollingToIt, let first = rows.first {
+      outlineView.scrollRowToVisible(first)
+    }
+  }
+
+  /// Shows the model's sort in the column headers.
+  private func updateSortIndicator() {
+    isApplyingModelState = true
+    defer { isApplyingModelState = false }
+    let column = Column(sortKey: model.sort.key)
+    outlineView.sortDescriptors = [
+      NSSortDescriptor(key: column.rawValue, ascending: model.sort.ascending)
+    ]
   }
 
   /// Names the controller after the folder and tells the owner when the
@@ -296,9 +442,19 @@ public final class BrowserViewController: NSViewController {
     item.size?.formatted(.byteCount(style: .file))
   }
 
+  /// The size on disk as text, or nil for an item that has none.
+  static func sizeOnDiskText(for item: FileItem) -> String? {
+    item.allocatedSize?.formatted(.byteCount(style: .file))
+  }
+
   /// The modified date as text, or nil for an item that has none.
   static func modifiedText(for item: FileItem) -> String? {
     item.modificationDate?.formatted(date: .abbreviated, time: .shortened)
+  }
+
+  /// The date the item was added to its folder as text, or nil.
+  static func addedText(for item: FileItem) -> String? {
+    item.dateAdded?.formatted(date: .abbreviated, time: .shortened)
   }
 
   /// Fills a cell, new or recycled, with one item's value for a column.
@@ -307,7 +463,9 @@ public final class BrowserViewController: NSViewController {
       switch column {
       case .name: item.name
       case .size: sizeText(for: item)
+      case .sizeOnDisk: sizeOnDiskText(for: item)
       case .modified: modifiedText(for: item)
+      case .added: addedText(for: item)
       }
     cell.textField?.stringValue = value ?? missingValueText
     // Dashes are not words, so both the cell and its text get a spoken
@@ -317,51 +475,134 @@ public final class BrowserViewController: NSViewController {
     cell.setSpokenText(spokenText)
     cell.textField?.setSpokenText(spokenText)
   }
+
+  /// Fills a cell of a status row: the reason in the name column, and
+  /// nothing in the others.
+  static func fill(_ cell: NSTableCellView, column: Column, statusMessage: String) {
+    cell.textField?.stringValue = column == .name ? statusMessage : ""
+    cell.setSpokenText(nil)
+    cell.textField?.setSpokenText(nil)
+  }
+
+  // MARK: Handles
+
+  /// The handle of the row for `item` at `key`, the same object each time.
+  private func node(for key: FolderKey, item: FileItem) -> OutlineNode {
+    if let existing = itemNodes[key] {
+      existing.item = item
+      return existing
+    }
+    let node = OutlineNode(key: key, item: item)
+    itemNodes[key] = node
+    return node
+  }
+
+  /// The handle of the folder at `key`, from the cache or else made from
+  /// what the model lists there.
+  private func handle(for key: FolderKey) -> OutlineNode? {
+    if let existing = itemNodes[key] { return existing }
+    guard let item = model.item(at: key) else { return nil }
+    return node(for: key, item: item)
+  }
+
+  /// What the outline is given for an index it asks for after the rows
+  /// changed under it: an empty row that cannot be selected. A reload follows
+  /// at once and replaces it.
+  private static let staleRow = OutlineNode(statusFor: .root, message: "")
+
+  private func statusNode(for key: FolderKey, message: String) -> OutlineNode {
+    if let existing = statusNodes[key] {
+      existing.message = message
+      return existing
+    }
+    let node = OutlineNode(statusFor: key, message: message)
+    statusNodes[key] = node
+    return node
+  }
 }
 
 extension BrowserViewController: NSUserInterfaceValidations {
   /// Enables menu and toolbar items only when their action can do something.
   public func validateUserInterfaceItem(_ item: any NSValidatedUserInterfaceItem) -> Bool {
     switch item.action {
-    case #selector(goBack(_:)): model.canGoBack
-    case #selector(goForward(_:)): model.canGoForward
-    case #selector(goToEnclosingFolder(_:)): model.enclosingFolder != nil
+    case #selector(goBack(_:)):
+      return model.canGoBack
+    case #selector(goForward(_:)):
+      return model.canGoForward
+    case #selector(goToEnclosingFolder(_:)):
+      return model.enclosingFolder != nil
     case #selector(openSelection(_:)):
-      tableView.selectedRowIndexes.count == 1
-        && model.items.indices.contains(tableView.selectedRow)
-        && model.items[tableView.selectedRow].isNavigable
-    default: true
+      guard outlineView.selectedRowIndexes.count == 1 else { return false }
+      let node = outlineView.item(atRow: outlineView.selectedRow) as? OutlineNode
+      return node?.item?.isNavigable == true
+    case #selector(toggleFoldersFirst(_:)):
+      (item as? NSMenuItem)?.state = model.sort.foldersFirst ? .on : .off
+      return true
+    default:
+      return true
     }
   }
 }
 
-extension BrowserViewController: NSTableViewDataSource, NSTableViewDelegate {
-  public func tableViewSelectionDidChange(_ notification: Notification) {
-    guard !isApplyingModelSelection else { return }
-    model.selection = Set(
-      tableView.selectedRowIndexes.filter { model.items.indices.contains($0) }
-        .map { model.items[$0].url })
+extension BrowserViewController: NSOutlineViewDataSource, NSOutlineViewDelegate {
+  // MARK: Rows
+
+  public func outlineView(_ outlineView: NSOutlineView, numberOfChildrenOfItem item: Any?) -> Int {
+    guard let node = item as? OutlineNode else { return model.items.count }
+    guard !node.isStatus else { return 0 }
+    // A folder that could not be listed has one row that says why.
+    if model.failure(of: node.key) != nil { return 1 }
+    return model.children(of: node.key).count
   }
 
-  public func numberOfRows(in tableView: NSTableView) -> Int {
-    model.items.count
+  public func outlineView(_ outlineView: NSOutlineView, child index: Int, ofItem item: Any?)
+    -> Any
+  {
+    guard let parent = item as? OutlineNode else {
+      guard model.items.indices.contains(index) else { return Self.staleRow }
+      let row = model.items[index]
+      return node(for: FolderKey.root.appending(row.name), item: row)
+    }
+    if let reason = model.failure(of: parent.key) {
+      return statusNode(for: parent.key, message: reason)
+    }
+    let rows = model.children(of: parent.key)
+    guard rows.indices.contains(index) else { return Self.staleRow }
+    return node(for: parent.key.appending(rows[index].name), item: rows[index])
   }
 
-  public func tableView(
-    _ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int
+  public func outlineView(_ outlineView: NSOutlineView, isItemExpandable item: Any) -> Bool {
+    (item as? OutlineNode)?.item?.isNavigable ?? false
+  }
+
+  public func outlineView(_ outlineView: NSOutlineView, shouldSelectItem item: Any) -> Bool {
+    (item as? OutlineNode)?.isStatus == false
+  }
+
+  /// What typing selects by: the item's name. A status row is not found.
+  public func outlineView(
+    _ outlineView: NSOutlineView, typeSelectStringFor tableColumn: NSTableColumn?, item: Any
+  ) -> String? {
+    (item as? OutlineNode)?.item?.name
+  }
+
+  public func outlineView(
+    _ outlineView: NSOutlineView, viewFor tableColumn: NSTableColumn?, item: Any
   ) -> NSView? {
-    guard let tableColumn,
-      let column = Column.allCases.first(where: { $0.identifier == tableColumn.identifier }),
-      model.items.indices.contains(row)
+    guard let tableColumn, let node = item as? OutlineNode,
+      let column = Column.allCases.first(where: { $0.identifier == tableColumn.identifier })
     else { return nil }
-    let item = model.items[row]
 
-    // A reuse identifier for the table's cell cache, not an accessibility identity.
+    // A reuse identifier for the outline's cell cache, not an accessibility identity.
     let cellIdentifier = NSUserInterfaceItemIdentifier(rawValue: "cell-\(column.rawValue)")
     let cell =
-      tableView.makeView(withIdentifier: cellIdentifier, owner: self) as? NSTableCellView
+      outlineView.makeView(withIdentifier: cellIdentifier, owner: self) as? NSTableCellView
       ?? Self.makeCell(identifier: cellIdentifier, column: column)
-    Self.fill(cell, column: column, item: item)
+    if let message = node.message, node.isStatus {
+      Self.fill(cell, column: column, statusMessage: message)
+    } else if let rowItem = node.item {
+      Self.fill(cell, column: column, item: rowItem)
+    }
     return cell
   }
 
@@ -372,7 +613,7 @@ extension BrowserViewController: NSTableViewDataSource, NSTableViewDelegate {
     cell.identifier = identifier
     let label = NSTextField(labelWithString: "")
     label.lineBreakMode = column == .name ? .byTruncatingMiddle : .byTruncatingTail
-    label.alignment = column == .size ? .right : .natural
+    label.alignment = [.size, .sizeOnDisk].contains(column) ? .right : .natural
     label.applyIdentifier(of: column.accessibility)
     label.translatesAutoresizingMaskIntoConstraints = false
     cell.addSubview(label)
@@ -383,5 +624,43 @@ extension BrowserViewController: NSTableViewDataSource, NSTableViewDelegate {
       label.centerYAnchor.constraint(equalTo: cell.centerYAnchor),
     ])
     return cell
+  }
+
+  // MARK: What the user does
+
+  public func outlineViewSelectionDidChange(_ notification: Notification) {
+    guard !isApplyingModelState else { return }
+    model.selection = Set(
+      outlineView.selectedRowIndexes.compactMap {
+        (outlineView.item(atRow: $0) as? OutlineNode)?.item?.url
+      })
+  }
+
+  /// A folder opened by the user is opened in the model, which lists it. Not
+  /// a move: history, the title and tabs are untouched.
+  public func outlineViewItemDidExpand(_ notification: Notification) {
+    guard !isApplyingModelState,
+      let node = notification.userInfo?["NSObject"] as? OutlineNode, !node.isStatus
+    else { return }
+    model.openFolder(node.key)
+  }
+
+  public func outlineViewItemDidCollapse(_ notification: Notification) {
+    guard !isApplyingModelState,
+      let node = notification.userInfo?["NSObject"] as? OutlineNode, !node.isStatus
+    else { return }
+    model.closeFolder(node.key)
+  }
+
+  /// A click on a column header sorts every level by that column.
+  public func outlineView(
+    _ outlineView: NSOutlineView, sortDescriptorsDidChange oldDescriptors: [NSSortDescriptor]
+  ) {
+    guard !isApplyingModelState, let first = outlineView.sortDescriptors.first,
+      let key = first.key, let column = Column(rawValue: key)
+    else { return }
+    model.changeSort(
+      to: FileItemSort(
+        key: column.sortKey, ascending: first.ascending, foldersFirst: model.sort.foldersFirst))
   }
 }

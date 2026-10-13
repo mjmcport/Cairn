@@ -7,10 +7,13 @@ public struct BrowserHistory: Sendable, Equatable {
   public struct Entry: Sendable, Equatable {
     public let location: URL
     public let selection: Set<URL>
+    /// The folders that were open in place when the place was left.
+    public let openFolders: Set<FolderKey>
 
-    public init(location: URL, selection: Set<URL> = []) {
+    public init(location: URL, selection: Set<URL> = [], openFolders: Set<FolderKey> = []) {
       self.location = location
       self.selection = selection
+      self.openFolders = openFolders
     }
   }
 
@@ -34,9 +37,12 @@ public struct BrowserHistory: Sendable, Equatable {
   /// Records a move to a new folder. Visiting the folder already showing
   /// changes nothing. Any forward history is discarded, as in a web browser.
   /// - Parameter selection: What is selected in the folder being left.
-  public mutating func visit(_ location: URL, leaving selection: Set<URL> = []) {
+  /// - Parameter openFolders: The folders open in place in the folder being left.
+  public mutating func visit(
+    _ location: URL, leaving selection: Set<URL> = [], openFolders: Set<FolderKey> = []
+  ) {
     guard !Self.isSamePlace(location, current) else { return }
-    backEntries.append(Entry(location: current, selection: selection))
+    backEntries.append(Entry(location: current, selection: selection, openFolders: openFolders))
     if backEntries.count > Self.limit {
       backEntries.removeFirst(backEntries.count - Self.limit)
     }
@@ -46,20 +52,26 @@ public struct BrowserHistory: Sendable, Equatable {
 
   /// Steps back one place.
   /// - Parameter selection: What is selected in the folder being left.
-  /// - Returns: The place now showing and its remembered selection, or `nil`
+  /// - Parameter openFolders: The folders open in place in the folder being left.
+  /// - Returns: The place now showing and what was remembered there, or `nil`
   ///   when there is nowhere to go back to.
-  public mutating func goBack(leaving selection: Set<URL> = []) -> Entry? {
+  public mutating func goBack(
+    leaving selection: Set<URL> = [], openFolders: Set<FolderKey> = []
+  ) -> Entry? {
     guard let entry = backEntries.popLast() else { return nil }
-    forwardEntries.insert(Entry(location: current, selection: selection), at: 0)
+    forwardEntries.insert(
+      Entry(location: current, selection: selection, openFolders: openFolders), at: 0)
     current = entry.location
     return entry
   }
 
   /// Steps forward one place. See ``goBack(leaving:)``.
-  public mutating func goForward(leaving selection: Set<URL> = []) -> Entry? {
+  public mutating func goForward(
+    leaving selection: Set<URL> = [], openFolders: Set<FolderKey> = []
+  ) -> Entry? {
     guard !forwardEntries.isEmpty else { return nil }
     let entry = forwardEntries.removeFirst()
-    backEntries.append(Entry(location: current, selection: selection))
+    backEntries.append(Entry(location: current, selection: selection, openFolders: openFolders))
     current = entry.location
     return entry
   }

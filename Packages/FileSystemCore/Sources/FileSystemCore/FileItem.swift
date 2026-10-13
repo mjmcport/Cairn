@@ -19,6 +19,13 @@ public struct FileItem: Sendable, Hashable, Identifiable {
   /// The logical size in bytes, or `nil` for anything that is not a plain file.
   public let size: Int64?
   public let modificationDate: Date?
+  /// The bytes the file takes on disk, which can be far from its logical
+  /// size (a sparse file, or one on a compressed volume), or `nil` for
+  /// anything that is not a plain file.
+  public let allocatedSize: Int64?
+  /// When the item was added to its folder, which is not when it was
+  /// created or changed, or `nil` when the volume does not say.
+  public let dateAdded: Date?
 
   public var id: URL { url }
 
@@ -33,13 +40,17 @@ public struct FileItem: Sendable, Hashable, Identifiable {
     kind: Kind,
     isHidden: Bool = false,
     size: Int64? = nil,
-    modificationDate: Date? = nil
+    modificationDate: Date? = nil,
+    allocatedSize: Int64? = nil,
+    dateAdded: Date? = nil
   ) {
     self.url = url
     self.kind = kind
     self.isHidden = isHidden
     self.size = size
     self.modificationDate = modificationDate
+    self.allocatedSize = allocatedSize
+    self.dateAdded = dateAdded
   }
 }
 
@@ -48,7 +59,8 @@ extension FileItem {
   /// building an item never makes another file-system call.
   public static let resourceKeys: Set<URLResourceKey> = [
     .isDirectoryKey, .isSymbolicLinkKey, .isPackageKey, .isHiddenKey,
-    .fileSizeKey, .contentModificationDateKey,
+    .fileSizeKey, .contentModificationDateKey, .totalFileAllocatedSizeKey,
+    .addedToDirectoryDateKey,
   ]
 
   /// Builds an item from resource values read for ``resourceKeys``.
@@ -68,7 +80,9 @@ extension FileItem {
       kind: kind,
       isHidden: values.isHidden ?? false,
       size: kind == .file ? values.fileSize.map(Int64.init) : nil,
-      modificationDate: values.contentModificationDate
+      modificationDate: values.contentModificationDate,
+      allocatedSize: kind == .file ? values.totalFileAllocatedSize.map(Int64.init) : nil,
+      dateAdded: values.addedToDirectoryDate
     )
   }
 }

@@ -34,15 +34,16 @@ Twelve steps that produce almost nothing you can see, and everything the visible
 | 2 | [Several places at once](phase-1-step-02-tabs.md) | Keep the original instead of saving and restoring; "which window?" |
 | 3 | [The first rows, at once](phase-1-step-03-fast-first-rows.md) | How a wait feels; asking "is this still wanted?" after every pause |
 | 4 | [A list that keeps up](phase-1-step-04-live-updates.md) | A new source of change must fit the old rules; make the other system share ownership |
+| 5 | [A drawer without leaving the room](phase-1-step-05-list-view.md) | Name a place so it cannot be spelled two ways; a test that measures time measures its neighbours; check the old version first |
 
 ## Ideas that keep coming back
 
 A few lessons appear in step after step. Watching one recur is the best way to learn it.
 
 - **A check must be able to fail.** Steps 1, 3, 6, 9 and 12 of Phase 0, and the follow-up.
-- **Keep slow work away from the interface.** Phase 0 steps 5 and 6; Phase 1 steps 3 and 4.
-- **A late answer to an old question.** Phase 0 step 5; Phase 1 steps 1, 3 and 4.
-- **Measure, and record the conditions.** Phase 0 steps 7 and 9; Phase 1 steps 3 and 4.
+- **Keep slow work away from the interface.** Phase 0 steps 5 and 6; Phase 1 steps 3, 4 and 5.
+- **A late answer to an old question.** Phase 0 step 5; Phase 1 steps 1, 3, 4 and 5.
+- **Measure, and record the conditions.** Phase 0 steps 7 and 9; Phase 1 steps 3, 4 and 5.
 - **Say plainly what is not done.** Nearly every page.
 - **It passed here, not there.** The follow-up; Phase 1 steps 1 and 2.
 

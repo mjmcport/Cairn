@@ -31,6 +31,13 @@ SWIFT_SOURCES := App UITests Packages
 # without being named here.
 PACKAGES := $(patsubst Packages/%/Package.swift,%,$(wildcard Packages/*/Package.swift))
 
+# Suites that assert on a clock. Every suite of a package runs in one test
+# process and shares its main actor, so a timing assertion measures how busy
+# the other suites keep it. These run alone, after the rest, in the packages
+# that have them. Their bounds are not loosened to fit the parallel run.
+TIMING_SUITES := LiveUpdateTests
+TIMING_PACKAGES := BrowserUI
+
 XCODEBUILD := xcodebuild -project $(PROJECT) -destination '$(DESTINATION)' \
 	-derivedDataPath $(DERIVED_DATA)
 
@@ -71,7 +78,12 @@ test: generate ## Run the script tests, the project-spec checks and every packag
 	@set -e; for package in $(PACKAGES); do \
 		echo "== $$package"; \
 		xcrun swift test --package-path Packages/$$package --scratch-path build/packages/$$package \
-			--skip PerformanceTests; \
+			--skip PerformanceTests $(foreach suite,$(TIMING_SUITES),--skip $(suite)); \
+	done
+	@set -e; for package in $(TIMING_PACKAGES); do \
+		echo "== $$package (timing tests, alone)"; \
+		xcrun swift test --package-path Packages/$$package --scratch-path build/packages/$$package \
+			$(foreach suite,$(TIMING_SUITES),--filter $(suite)); \
 	done
 
 uitest: generate ## Run the end-to-end tests

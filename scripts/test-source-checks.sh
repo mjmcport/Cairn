@@ -121,6 +121,20 @@ make_ui_tree; echo "$toolbar_literal" >> "$ui_dir/Accessibility.swift"
 echo 'let item = NSToolbarItem(.backButton, symbolName: "chevron.left")' >> "$ui_dir/View.swift"
 expect $accessibility pass "accessibility: allows a toolbar item built in the helper file"
 
+# SwiftUI sets an identity with modifiers, not with the AppKit calls.
+make_ui_tree; echo 'Toggle("x", isOn: $on).accessibilityIdentifier("ok")' >> "$ui_dir/View.swift"
+expect $accessibility fail "accessibility: rejects a SwiftUI identifier outside the helper file"
+
+make_ui_tree; echo 'Text("x").accessibilityLabel("OK")' >> "$work/tree/App/AppDelegate.swift"
+expect $accessibility fail "accessibility: rejects a SwiftUI label in the app"
+
+make_ui_tree; echo 'view.accessibilityIdentifier(element.identifier).accessibilityLabel(element.label)' >> "$ui_dir/Accessibility.swift"
+echo 'Toggle("x", isOn: $on).apply(.rememberOpenFoldersToggle)' >> "$ui_dir/View.swift"
+expect $accessibility pass "accessibility: allows SwiftUI modifiers in the helper file and apply(_:)"
+
+make_ui_tree; echo '// never call .accessibilityLabel( directly' >> "$ui_dir/View.swift"
+expect $accessibility pass "accessibility: ignores a SwiftUI modifier named in a comment"
+
 # A checkout under a folder whose name has a space is checked like any other.
 move_tree_under_a_space() {
     rm -rf "$work/My Projects"
@@ -146,6 +160,10 @@ expect $accessibility fail "space in path: accessibility rejects a direct label"
 make_ui_tree; echo "$toolbar_literal" >> "$ui_dir/View.swift"
 move_tree_under_a_space
 expect $accessibility fail "space in path: accessibility rejects a toolbar item built outside the helper file"
+
+make_ui_tree; echo 'Toggle("x", isOn: $on).accessibilityIdentifier("ok")' >> "$ui_dir/View.swift"
+move_tree_under_a_space
+expect $accessibility fail "space in path: accessibility rejects a SwiftUI identifier outside the helper file"
 
 make_tree; echo '    let stream = FSEventStreamCreate(nil, callback, &context, paths, since, 0.3, flags)' > "$source_dir/Bad.swift"
 move_tree_under_a_space

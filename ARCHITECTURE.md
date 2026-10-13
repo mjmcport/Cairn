@@ -5,7 +5,7 @@ Cairn is an AppKit app built from five Swift packages. The rule that shapes ever
 ## Layers
 
 ```
-App target      Windows, menus, launch, diagnostics subscriber
+App target      Windows, menus, the Settings window, launch, diagnostics subscriber
     │
 BrowserUI       Panes, the file list, models that drive the views
     │                                          ── AppKit boundary ──
@@ -21,11 +21,11 @@ An arrow means "depends on". `BrowserUI` also uses `FileSystemCore` directly. No
 
 | Module | Responsibility | May import |
 | --- | --- | --- |
-| `App/` | Entry point, main menu, the window, MetricKit subscriber | AppKit, MetricKit, BrowserUI, FileSystemCore |
-| `BrowserUI` | `PaneViewController` (one pane: its tabs, the window's title and keyboard focus), `TabList` (the order of a pane's tabs and which one is showing; no AppKit in it), `TabBarView` (the row of tabs, their close buttons and the New Tab button), `BrowserModel` (state of one browser), `BrowserHistory` (its back and forward places, with the selection left at each), `BrowserViewController` (the list; one per tab), `BrowserToolbar` (the Back and Forward buttons), `AccessibilityElement`, `InitialLocation` | AppKit, the three core packages |
+| `App/` | Entry point, main menu, the window, the Settings window, MetricKit subscriber | AppKit, SwiftUI, MetricKit, BrowserUI, FileSystemCore |
+| `BrowserUI` | `PaneViewController` (one pane: its tabs, the window's title and keyboard focus), `TabList` (the order of a pane's tabs and which one is showing; no AppKit in it), `TabBarView` (the row of tabs, their close buttons and the New Tab button), `BrowserModel` (state of one browser: the folder shown, the folders open in it, the selection), `FolderKey` and `OpenFolder` (a folder open in place, by its names from the folder shown), `BrowserHistory` (its back and forward places, with the selection and the open folders left at each), `BrowserViewController` (the list, an outline; one per tab), `OutlineNode` (the handle of one outline row), `BrowserToolbar` (the Back and Forward buttons), `BrowserSettings` and `SettingsView` (the one setting, and its window's content), `AccessibilityElement`, `InitialLocation` | AppKit, SwiftUI, the three core packages |
 | `FileOperations` | `FileOperation` today; the operation engine in Phase 1 | Foundation, FileSystemCore |
 | `FileMetadata` | `MetadataGroup` today; Get Info readers in Phase 1 | Foundation, FileSystemCore |
-| `FileSystemCore` | `FileItem`, `DirectoryReader`, `FileItemSort`, `FolderWatcher` (one FSEvents stream per watched folder), `MainThreadGuard`, `Log`, `LocalDiagnosticsStore` | Foundation, os, CoreServices |
+| `FileSystemCore` | `FileItem` (with its size on disk and the date it was added), `DirectoryReader`, `FileItemSort` (name, size, size on disk, dates modified and added), `FolderWatcher` (one FSEvents stream per watched folder), `MainThreadGuard`, `Log`, `LocalDiagnosticsStore` | Foundation, os, CoreServices |
 | `TestSupport` | `FixtureTree`, `FixtureNode`, `FixtureNames`, `TemporaryDirectory` | Foundation |
 
 ## How a folder gets on screen
@@ -34,9 +34,9 @@ An arrow means "depends on". `BrowserUI` also uses `FileSystemCore` directly. No
 2. Each browser owns a `BrowserModel` on the main actor. A user action that loads a folder goes through `run`, which cancels the previous action's task and starts a new one. A command that cannot do anything, such as Back with no history or Enclosing Folder at the root, never reaches `run`, so a load under way is left to finish.
 3. `BrowserModel.load()` reads `DirectoryReader.listing(in:)`, a stream of at most two events. The folder is enumerated in a task that never runs on the main actor, with the listing's resource keys prefetched and a cancellation check every 256 items. A folder of more than 2,000 items hands over its first 2,000 as soon as the next one has been read, and every folder ends with all of its items. Ending the stream from the model's side cancels the enumeration.
 4. When the first items arrive and the list is empty, the model filters out hidden items and calls `onChange` with the rows as they were read, unsorted, while its state is still loading. The rows can be used: selected, opened, scrolled. A reload skips this, so it keeps its rows until the sorted list replaces them. A folder that fits in one batch has no first items and is shown once.
-5. When all the items have arrived, `FileItemSort.arranged(_:includingHidden:)` filters and sorts them off the main actor, reading each name once and checking for cancellation on every comparison. The model then sets the sorted list and the selection and calls `onChange` again. The selection is what the user has selected since the move, or else what the history remembered; it is not applied to the first rows. The controller reloads the whole table at each `onChange`, which keeps the scroll offset and keyboard focus.
+5. When all the items have arrived, `FileItemSort.arranged(_:includingHidden:)` filters and sorts them off the main actor, reading each name once and checking for cancellation on every comparison. The model then sets the sorted list and the selection and calls `onChange` again. The selection is what the user has selected since the move, or else what the history remembered; it is not applied to the first rows. The controller reloads the whole outline for a load or a refresh of the top level, which keeps the scroll offset and keyboard focus, and one open folder for a change inside it.
 6. After every wait, the model checks two things before it publishes: a load counter, which discards a result for a folder the user has already left, and the task's cancellation, because a cancelled stream still delivers an event that was waiting and then ends without throwing. A stream that ends with no all-items event is a failed listing. A failed listing clears the rows, the first rows included, and shows why.
-7. Every move to another folder is recorded in the model's `BrowserHistory` with the selection being left, so Back and Forward restore it. Places are compared by the text of their paths, and a selection is matched to the listed items by name; neither touches the disk.
+7. Every move to another folder is recorded in the model's `BrowserHistory` with the selection being left, so Back and Forward restore it. Places are compared by the text of their paths, and a selection at the top level is matched to the listed items by name, and one inside an open folder by its place under the folder shown; neither touches the disk.
 
 A load is wrapped in two signpost intervals. `FirstRows` runs from the request until the list has rows: the first rows of a large folder, or the sorted list of a smaller one. The performance test measures it. `LoadFolder` covers the whole load, until the sorted list has been published.
 
@@ -54,9 +54,28 @@ A load is wrapped in two signpost intervals. `FirstRows` runs from the request u
 
 A change that another computer makes on a network share is not reported by FSEvents; those locations are handled later in Phase 1.
 
+## How a folder opens in place
+
+The list is an `NSOutlineView`. A folder row has a disclosure triangle, and opening it lists the folder beneath the row without moving anywhere: history, the title and the tabs are untouched.
+
+1. The model keeps the top level as `items` and a dictionary of open folders by `FolderKey`, the names from the folder shown down to the folder. Each open folder holds its own sorted items and whether it is listing, listed, or could not be listed. A key is made of names because a listing spells a folder differently from the location that was opened.
+2. `openFolder(_:)` and `closeFolder(_:)` change that state as the command arrives and publish at once. Only the listing runs in a task: `DirectoryReader.items(in:)` and the same filter and sort, off the main actor, publishing the folder's rows once they are sorted. Each opening has a token, and each listing also carries the load counter, so a move, a load or a close retires a listing in flight.
+3. A folder that cannot be listed stays open with the reason, which the outline draws as a row beneath it that is not selectable. A later listing of the same folder brings its rows back.
+4. A reload keeps the open folders and lists them again, one at a time, after the top level has settled; a folder that is gone is closed with what was open inside it. A move closes everything.
+5. Every open folder has its own watch, and one answerer takes the signals of all of them one at a time, shallowest first, with the rules above: a refresh is of one folder, publishes only when its rows changed, and never changes the load counter. A signal for a folder that is being listed, or that arrives while the top level loads, is paid with one refresh when that settles.
+6. The selection may hold items at any level. It is looked up by an item's own URL, then by its path below the location as it was opened or below the folder the listing followed, and only then, for a URL outside both, by name at the top level.
+7. A change of sort re-arranges the top level and every listed open folder in one pass off the main actor and publishes once. A header click and View > Keep Folders on Top both come to `changeSort(to:)`.
+8. The outline holds a handle for each row that stays equal to itself across reloads, so a folder that was open is still open. AppKit asks for the handles of the rows it draws, so a handle for a folder far down a long list is made from the model when it is needed. Opening and closing by the user come back from the outline's notifications and go to the model; opening and closing from the model never go back.
+
+### What a history entry remembers
+
+A history entry holds the keys of the folders that were open when the place was left, beside the selection. Going Back or Forward to it, with the setting on, opens them again once the top level has settled: shallowest first, one at a time, through the same path as the user's own opening, so it is retired by a move, a load or a close like any listing. A folder that is gone is skipped without a message, and what was selected inside them returns as their rows appear, unless the user has selected something since. Open, Enclosing Folder and a first visit start with a closed outline.
+
+The setting is `BrowserSettings.rememberOpenFolders`, in the user defaults, on until it is turned off. It is read when the move is made. The Settings window (Cairn > Settings…) is a SwiftUI view hosted in an AppKit window and holds that one checkbox.
+
 ## Tabs
 
-A pane keeps every tab's browser alive as a child view controller, so a tab that is not showing keeps its folder, history, selection and scroll position, and finishes a listing it had started. Only the showing tab is watched for changes on disk, and only while the pane is on screen; a tab that is shown again refreshes its list as its watch starts. Closing a tab cancels its listing and stops its watch. Closing the last tab closes the window.
+A pane keeps every tab's browser alive as a child view controller, so a tab that is not showing keeps its folder, history, selection, open folders, sort and scroll position, and finishes a listing it had started. Only the showing tab is watched for changes on disk, and only while the pane is on screen; a tab that is shown again refreshes its list as its watch starts. Closing a tab cancels its listing and stops its watch. Closing the last tab closes the window.
 
 - `TabList` holds the rules: a new tab goes last and is shown, closing the showing tab shows its right neighbour or else its left, and next and previous wrap around. The tab bar is hidden while there is one tab.
 - A tab command (`newTab`, `closeTab`, `showNextTab`, `showPreviousTab`) changes the tab list as it arrives and brings the window in line before it returns. Only a browser's listing runs in a task, so the same command sent twice in a row does what two commands should.
@@ -71,7 +90,7 @@ A pane keeps every tab's browser alive as a child view controller, so a tab that
 | No file-system call on the main thread | `MainThreadGuard.assertOffMainThread()` at each entry point; unit tests prove each guard fires; `scripts/check-main-thread-guard.sh`, whose list of calls includes `FSEventStreamCreate` and `realpath` |
 | Core packages never import a UI framework | Package manifests; `scripts/check-appkit-boundary.sh` |
 | No networking code | `scripts/check-no-network.sh` |
-| Every control has an identifier and a spoken label | `AccessibilityElement` and `apply(_:)`; `scripts/check-accessibility.sh`; the accessibility audit in the UI suite |
+| Every control has an identifier and a spoken label | `AccessibilityElement` and `apply(_:)`, for AppKit views and for SwiftUI; `scripts/check-accessibility.sh`, which also rejects the SwiftUI modifiers outside the helper; the accessibility audit in the UI suite |
 | Swift 6, complete concurrency checking, warnings as errors | `project.yml`, package manifests |
 | One code style | `.swift-format`, `make lint`, the pre-commit hook |
 | Build settings match the decisions | `scripts/check-project-spec.sh` |
@@ -86,6 +105,8 @@ A pane keeps every tab's browser alive as a child view controller, so a tab that
 | Performance | XCTest `measure` | `Packages/FileSystemCore/Tests/FileSystemCorePerformanceTests`, `UITests/PerformanceTests.swift` | `make perf` |
 
 Tests build real folder trees with `FixtureTree` in the temporary directory and read results back with system calls. They never touch a real user folder.
+
+A unit test that asserts on a clock is in a suite named in `TIMING_SUITES` in the `Makefile`. Every suite of a package shares one process and one main actor, so in the parallel run such a test measures how busy the other suites keep it; `make test` runs those suites alone, after the rest, and their bounds are not widened.
 
 ## Build
 

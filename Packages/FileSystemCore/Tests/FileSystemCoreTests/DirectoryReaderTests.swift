@@ -35,6 +35,38 @@ import Testing
     #expect(byName["Sample.app"]?.isNavigable == false)
   }
 
+  @Test func listsWhatAFileTakesOnDiskAndWhenItWasAddedToItsFolder() async throws {
+    let tree = try FixtureTree.build {
+      FixtureNode.file("written.bin", size: 100_000)
+      FixtureNode.sparseFile("sparse.img", size: 50_000_000)
+      FixtureNode.directory("Folder") {
+        FixtureNode.file("nested.txt")
+      }
+      FixtureNode.symlink("link", to: "written.bin")
+      FixtureNode.bundle("Sample")
+    }
+    defer { try? tree.remove() }
+
+    let items = try await DirectoryReader().items(in: tree.root)
+    let byName = Dictionary(uniqueKeysWithValues: items.map { ($0.name, $0) })
+
+    let written = try #require(byName["written.bin"])
+    // Whole blocks: at least the bytes written.
+    #expect(try #require(written.allocatedSize) >= 100_000)
+    let added = try #require(written.dateAdded)
+    #expect(abs(added.timeIntervalSinceNow) < 60)
+
+    // A sparse file is large on paper and takes almost nothing on disk.
+    let sparse = try #require(byName["sparse.img"])
+    #expect(sparse.size == 50_000_000)
+    #expect(try #require(sparse.allocatedSize) < 1_000_000)
+
+    // Folders, links and packages have no size on disk of their own.
+    for name in ["Folder", "link", "Sample.app"] {
+      #expect(byName[name]?.allocatedSize == nil, "\(name)")
+    }
+  }
+
   @Test func reportsHiddenItemsSoTheCallerCanFilterThem() async throws {
     let tree = try FixtureTree.build {
       FixtureNode.file("visible.txt")

@@ -31,15 +31,27 @@ import Testing
   /// first look after going live is over. Nothing on disk has been touched
   /// since the fixture was built.
   private func watchingModel(on folder: URL) async throws -> BrowserModel {
+    try await watching(on: folder).model
+  }
+
+  private func watching(on folder: URL) async throws -> (
+    model: BrowserModel, answered: AnsweredSignals
+  ) {
     let model = BrowserModel(location: folder)
     let answered = AnsweredSignals(of: model)
     model.startWatching()
     await model.load()
     try #require(model.state == .loaded)
     try #require(await eventually { answered.count >= 1 }, "The watch never went live")
-    // A new stream can deliver events from just before it started, such as the
-    // ones that built the fixture. Wait until none have arrived for a while, so
-    // that a test's own change is the only thing left to be seen.
+    try await waitUntilQuiet(answered)
+    return (model, answered)
+  }
+
+  /// Waits until the model has answered no signal for ``quiet``. A new stream
+  /// can deliver events from just before it started, such as the ones that
+  /// built the fixture; so that a test's own change is the only thing left to
+  /// be seen, they are let through first.
+  private func waitUntilQuiet(_ answered: AnsweredSignals) async throws {
     var seen = answered.count
     var quietSince = ContinuousClock.now
     let deadline = ContinuousClock.now + Self.bound
@@ -51,7 +63,6 @@ import Testing
         quietSince = .now
       }
     }
-    return model
   }
 
   private func names(_ model: BrowserModel) -> [String] {
@@ -133,5 +144,55 @@ import Testing
     try Data().write(to: watched.appending(path: "back.txt"), options: .withoutOverwriting)
     #expect(await eventually { model.state == .loaded && names(model) == ["back.txt"] })
     #expect(!states.contains(.loading))
+  }
+
+  @Test func aFileCreatedInAnOpenFolderShowsWithinOneSecondAndKeepsTheSelectionAndTheOpenState()
+    async throws
+  {
+    let tree = try FixtureTree.build {
+      FixtureNode.file("top.txt")
+      FixtureNode.directory("Sub") {
+        for index in 0..<50 {
+          FixtureNode.file(FixtureNames.numbered(index))
+        }
+      }
+    }
+    defer { try? tree.remove() }
+    let (model, answered) = try await watching(on: tree.root)
+    let subKey = FolderKey(names: ["Sub"])
+    #expect(model.openFolder(subKey))
+    await model.waitForOpenFolders()
+    try #require(model.children(of: subKey).count == 50)
+    // The new folder's own watch goes live and its first look is over.
+    let afterOpen = answered.count
+    try #require(
+      await eventually { answered.count > afterOpen }, "The open folder's watch never went live")
+    try await waitUntilQuiet(answered)
+
+    let selected = try #require(model.children(of: subKey).first)
+    model.selection = [selected.url]
+    var shownAt: ContinuousClock.Instant?
+    var shownWith: BrowserModel.Publish?
+    model.onChange = { [unowned model] in
+      if shownAt == nil, model.children(of: subKey).contains(where: { $0.name == "new.txt" }) {
+        shownAt = .now
+        shownWith = model.lastPublish
+      }
+    }
+    let subURL = try #require(model.items.first { $0.name == "Sub" }).url
+    try Data().write(to: subURL.appending(path: "new.txt"), options: .withoutOverwriting)
+    let created = ContinuousClock.now
+
+    try #require(await eventually { shownAt != nil }, "The new file never showed")
+    let elapsed = try #require(shownAt) - created
+    print("LiveUpdateTests: a new file in an open folder showed after \(elapsed)")
+    #expect(elapsed < .seconds(1))
+    #expect(model.isOpen(subKey))
+    #expect(model.children(of: subKey).count == 51)
+    #expect(model.selection == [selected.url])
+    // The folder's rows arrive as a folder publish. The top level may then
+    // refresh as well, because the folder's modified date changed.
+    #expect(shownWith == .folder)
+    #expect(names(model) == ["Sub", "top.txt"])
   }
 }

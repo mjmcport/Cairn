@@ -1,4 +1,5 @@
 import AppKit
+import SwiftUI
 
 /// The accessibility identity of one control: a stable identifier that tests
 /// find it by, and the label VoiceOver speaks.
@@ -33,8 +34,12 @@ extension AccessibilityElement {
     identifier: "name-text", label: "Name")
   public static let sizeCell = AccessibilityElement(
     identifier: "size-text", label: "Size")
+  public static let sizeOnDiskCell = AccessibilityElement(
+    identifier: "size-on-disk-text", label: "Size on Disk")
   public static let modifiedCell = AccessibilityElement(
     identifier: "modified-text", label: "Date Modified")
+  public static let addedCell = AccessibilityElement(
+    identifier: "added-text", label: "Date Added")
   public static let backButton = AccessibilityElement(
     identifier: "go-back", label: "Back")
   public static let forwardButton = AccessibilityElement(
@@ -50,12 +55,23 @@ extension AccessibilityElement {
     identifier: "close-tab", label: "Close Tab")
   public static let newTabButton = AccessibilityElement(
     identifier: "new-tab", label: "New Tab")
+  public static let settingsWindow = AccessibilityElement(
+    identifier: "settings-window", label: "Settings")
+  /// The view that hosts the Settings window's content. The audit reports a
+  /// hosting view that has no description.
+  public static let settingsContent = AccessibilityElement(
+    identifier: "settings-content", label: "Settings")
+  public static let rememberOpenFoldersToggle = AccessibilityElement(
+    identifier: "setting-remember-open-folders",
+    label: "Open folders again when going back or forward")
 
   /// Every element the app declares. Tests check that identifiers are unique
   /// and labels are present.
   public static let all: [AccessibilityElement] = [
-    .mainWindow, .browserView, .fileList, .browserStatus, .nameCell, .sizeCell, .modifiedCell,
-    .backButton, .forwardButton, .tabBar, .tab, .closeTabButton, .newTabButton,
+    .mainWindow, .browserView, .fileList, .browserStatus, .nameCell, .sizeCell, .sizeOnDiskCell,
+    .modifiedCell, .addedCell, .backButton, .forwardButton, .tabBar, .tab, .closeTabButton,
+    .newTabButton, .settingsWindow,
+    .settingsContent, .rememberOpenFoldersToggle,
   ]
 }
 
@@ -93,6 +109,14 @@ extension NSView {
   /// size. Pass `nil` to go back to speaking the visible text.
   public func setSpokenText(_ text: String?) {
     setAccessibilityLabel(text)
+  }
+}
+
+extension View {
+  /// Gives a SwiftUI control its identifier and spoken label together, as
+  /// `apply(_:)` does for a view.
+  public func apply(_ element: AccessibilityElement) -> some View {
+    accessibilityIdentifier(element.identifier).accessibilityLabel(element.label)
   }
 }
 

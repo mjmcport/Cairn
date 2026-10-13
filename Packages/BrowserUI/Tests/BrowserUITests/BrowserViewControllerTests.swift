@@ -7,7 +7,7 @@ import Testing
 @testable import BrowserUI
 
 @Suite @MainActor struct BrowserViewControllerTests {
-  @Test func buildsAnIdentifiedLabelledListWithThreeColumns() throws {
+  @Test func buildsAnIdentifiedLabelledListWithFiveColumns() throws {
     let folder = URL(filePath: "/fixture/folder", directoryHint: .isDirectory)
     let controller = BrowserViewController(
       location: folder, reader: StubReader(results: [folder: []]))
@@ -17,7 +17,9 @@ import Testing
     let table = try #require(Self.firstSubview(of: NSTableView.self, in: view))
     #expect(table.accessibilityIdentifier() == "file-list")
     #expect(table.accessibilityLabel() == "Files")
-    #expect(table.tableColumns.map(\.title) == ["Name", "Size", "Date Modified"])
+    #expect(
+      table.tableColumns.map(\.title)
+        == ["Name", "Size", "Size on Disk", "Date Modified", "Date Added"])
   }
 
   @Test func titleIsTheFolderName() {
@@ -47,7 +49,10 @@ import Testing
     let table = try #require(Self.firstSubview(of: NSTableView.self, in: controller.view))
     await controller.loadTask?.value
 
-    let expected = [(column: 1, spoken: "No size"), (column: 2, spoken: "No date")]
+    let expected = [
+      (column: 1, spoken: "No size"), (column: 2, spoken: "No size on disk"),
+      (column: 3, spoken: "No date"), (column: 4, spoken: "No date added"),
+    ]
     for (column, spoken) in expected {
       let cell = try #require(
         table.view(atColumn: column, row: 0, makeIfNecessary: true) as? NSTableCellView)
@@ -619,7 +624,7 @@ import Testing
 
     var selectionChanges = 0
     let observer = NotificationCenter.default.addObserver(
-      forName: NSTableView.selectionDidChangeNotification, object: table, queue: nil
+      forName: NSOutlineView.selectionDidChangeNotification, object: table, queue: nil
     ) { _ in
       MainActor.assumeIsolated { selectionChanges += 1 }
     }
@@ -832,7 +837,7 @@ import Testing
 
     var selectionChanges = 0
     let observer = NotificationCenter.default.addObserver(
-      forName: NSTableView.selectionDidChangeNotification, object: table, queue: nil
+      forName: NSOutlineView.selectionDidChangeNotification, object: table, queue: nil
     ) { _ in
       MainActor.assumeIsolated { selectionChanges += 1 }
     }
