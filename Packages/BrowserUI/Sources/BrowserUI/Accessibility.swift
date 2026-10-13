@@ -47,6 +47,22 @@ extension AccessibilityElement {
   /// the fixed one.
   public static let iconCell = AccessibilityElement(
     identifier: "icon-cell", label: "Item")
+  public static let columnBrowser = AccessibilityElement(
+    identifier: "column-browser", label: "Files")
+  /// Each column of the browser is a list of entries. It is named by its
+  /// place, such as "Column 2", so a screen reader can say where it is.
+  public static let browserColumn = AccessibilityElement(
+    identifier: "browser-column", label: "Column")
+  /// The preview column. It holds the picture, which is decoration, and
+  /// texts that speak for themselves.
+  public static let preview = AccessibilityElement(
+    identifier: "preview", label: "Preview")
+  public static let previewName = AccessibilityElement(
+    identifier: "preview-name", label: "Name")
+  /// Every fact of the preview shares this identifier, as list cells share
+  /// theirs: each says its own words, such as "Size: 2 kB".
+  public static let previewFact = AccessibilityElement(
+    identifier: "preview-fact", label: "Fact")
   public static let backButton = AccessibilityElement(
     identifier: "go-back", label: "Back")
   public static let forwardButton = AccessibilityElement(
@@ -75,8 +91,10 @@ extension AccessibilityElement {
   /// Every element the app declares. Tests check that identifiers are unique
   /// and labels are present.
   public static let all: [AccessibilityElement] = [
+    .browserColumn,
     .mainWindow, .browserView, .fileList, .browserStatus, .nameCell, .sizeCell, .sizeOnDiskCell,
-    .modifiedCell, .addedCell, .iconView, .iconCell, .backButton, .forwardButton, .tabBar, .tab,
+    .modifiedCell, .addedCell, .iconView, .iconCell, .columnBrowser, .preview, .previewName,
+    .previewFact, .backButton, .forwardButton, .tabBar, .tab,
     .closeTabButton,
     .newTabButton, .settingsWindow,
     .settingsContent, .rememberOpenFoldersToggle,

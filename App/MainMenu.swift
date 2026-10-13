@@ -94,6 +94,11 @@ enum MainMenu {
       action: #selector(BrowserViewController.showAsIcons(_:)),
       keyEquivalent: "2"
     )
+    viewMenu.addItem(
+      withTitle: "as Columns",
+      action: #selector(BrowserViewController.showAsColumns(_:)),
+      keyEquivalent: "3"
+    )
     viewMenu.addItem(.separator())
     viewMenu.addItem(
       withTitle: "Keep Folders on Top",

@@ -129,4 +129,86 @@ import Testing
     #expect(model.items.map(\.name) == ["a.txt", "b.txt"])
     #expect(model.viewMode == .icons)
   }
+
+  // MARK: Columns
+
+  private func modelWithTwoLevelsOpen() async -> BrowserModel {
+    var reader = StubReader(results: [
+      root: [folder("Sub", in: root), folder("Other", in: root), file("a.txt", in: root)],
+      sub: [folder("Deep", in: sub), file("x.txt", in: sub)],
+      deep: [file("z.txt", in: deep)],
+      root.appending(path: "Other", directoryHint: .isDirectory): [file("o.txt", in: root)],
+    ])
+    reader.gates = [:]
+    let model = BrowserModel(location: root, reader: reader)
+    await model.load()
+    model.openFolder(subKey)
+    await model.waitForOpenFolders()
+    model.openFolder(deepKey)
+    await model.waitForOpenFolders()
+    model.openFolder(FolderKey(names: ["Other"]))
+    await model.waitForOpenFolders()
+    return model
+  }
+
+  @Test func columnsKeepTheFoldersThatLeadToTheSelectionAndCloseTheRest() async throws {
+    let model = await modelWithTwoLevelsOpen()
+    model.selection = [deep.appending(path: "z.txt")]
+    var published: [BrowserModel.Publish] = []
+    model.onChange = { published.append(model.lastPublish) }
+
+    model.setViewMode(.columns)
+
+    #expect(Set(model.openFolders.keys) == [subKey, deepKey])
+    #expect(model.selection == [deep.appending(path: "z.txt")])
+    #expect(published == [.mode])
+  }
+
+  @Test func aSelectionHigherUpKeepsOnlyTheChainToItsFolder() async throws {
+    let model = await modelWithTwoLevelsOpen()
+    model.selection = [sub.appending(path: "x.txt")]
+
+    model.setViewMode(.columns)
+    // Deep, which is open beyond the selection, goes; Sub stays.
+    #expect(Set(model.openFolders.keys) == [subKey])
+    #expect(model.selection == [sub.appending(path: "x.txt")])
+  }
+
+  @Test func aSelectedFolderThatIsOpenStaysOpenAndOneThatIsNotIsNotOpened() async throws {
+    let model = await modelWithTwoLevelsOpen()
+    model.selection = [sub]
+    model.setViewMode(.columns)
+    #expect(Set(model.openFolders.keys) == [subKey])
+
+    let other = await modelWithTwoLevelsOpen()
+    other.closeFolder(subKey)
+    other.selection = [sub]
+    other.setViewMode(.columns)
+    #expect(!other.isOpen(subKey))
+  }
+
+  @Test func selectionsInDifferentFoldersOrNoSelectionCloseEveryFolder() async throws {
+    let mixed = await modelWithTwoLevelsOpen()
+    mixed.selection = [sub.appending(path: "x.txt"), root.appending(path: "a.txt")]
+    mixed.setViewMode(.columns)
+    #expect(mixed.openFolders.isEmpty)
+    // What was selected inside Sub falls back to the folder.
+    #expect(mixed.selection == [sub, root.appending(path: "a.txt")])
+
+    let none = await modelWithTwoLevelsOpen()
+    none.setViewMode(.columns)
+    #expect(none.openFolders.isEmpty)
+  }
+
+  @Test func leavingColumnsForTheListKeepsFoldersOpenAndForIconsClosesThem() async throws {
+    let model = await modelWithTwoLevelsOpen()
+    model.selection = [deep.appending(path: "z.txt")]
+    model.setViewMode(.columns)
+    model.setViewMode(.list)
+    #expect(Set(model.openFolders.keys) == [subKey, deepKey])
+
+    model.setViewMode(.columns)
+    model.setViewMode(.icons)
+    #expect(model.openFolders.isEmpty)
+  }
 }

@@ -39,6 +39,9 @@ public final class BrowserModel {
     case list
     /// A grid of pictures and names, in which a folder is entered.
     case icons
+    /// A row of columns: the folders that lead to the selection, each
+    /// listing the one selected in the column before it, and a preview.
+    case columns
   }
 
   /// Back and forward history. `history.current` is the folder being shown.
@@ -801,17 +804,78 @@ public final class BrowserModel {
   public func setViewMode(_ mode: ViewMode) {
     guard mode != viewMode else { return }
     viewMode = mode
-    if mode == .icons {
+    switch mode {
+    case .list:
+      // The folders that are open stay open: the list shows them.
+      break
+    case .icons:
       for key in openFolders.keys where key.depth == 1 {
-        let folderURL = item(at: key)?.url
-        let dropped = removeFolder(key)
-        if !selection.isDisjoint(with: dropped) {
-          selection.subtract(dropped)
-          if let folderURL { selection.insert(folderURL) }
-        }
+        closeFolderQuietly(key)
       }
+    case .columns:
+      pruneOpenFolders(keepingPathTo: selection)
     }
     publish(.mode)
+  }
+
+  /// Closes `key` and what is open inside it without publishing. What was
+  /// selected inside falls back to the folder, as when the user closes it.
+  private func closeFolderQuietly(_ key: FolderKey) {
+    let folderURL = item(at: key)?.url
+    let dropped = removeFolder(key)
+    if !selection.isDisjoint(with: dropped) {
+      selection.subtract(dropped)
+      if let folderURL { selection.insert(folderURL) }
+    }
+  }
+
+  /// The selected items that are listed, at any level, in no particular
+  /// order. A selected URL that is not listed is not in the result.
+  var selectedItems: [FileItem] {
+    guard !selection.isEmpty else { return [] }
+    var found = items.filter { selection.contains($0.url) }
+    for folder in openFolders.values {
+      found += folder.items.filter { selection.contains($0.url) }
+    }
+    return found
+  }
+
+  /// The key of the item with this URL in the top level or an open folder,
+  /// or nil when it is not listed.
+  func key(of url: URL) -> FolderKey? {
+    if let item = items.first(where: { $0.url == url }) {
+      return FolderKey.root.appending(item.name)
+    }
+    for (folder, contents) in openFolders {
+      if let item = contents.items.first(where: { $0.url == url }) {
+        return folder.appending(item.name)
+      }
+    }
+    return nil
+  }
+
+  /// Closes every open folder that is not on the way to `selection`. The
+  /// way to a selection is the chain of folders that lead to the folder the
+  /// selected items are in, and the selected folder itself when it is the
+  /// only item selected and is open. With nothing selected, or items in
+  /// different folders, no folder is kept.
+  func pruneOpenFolders(keepingPathTo selection: Set<URL>) {
+    let keys = selection.compactMap { key(of: $0) }
+    var keep = Set<FolderKey>()
+    if !selection.isEmpty, keys.count == selection.count,
+      Set(keys.map { $0.parent ?? .root }).count == 1, let parent = keys[0].parent
+    {
+      var next: FolderKey? = parent
+      while let key = next, !key.isRoot {
+        keep.insert(key)
+        next = key.parent
+      }
+      if keys.count == 1, openFolders[keys[0]] != nil { keep.insert(keys[0]) }
+    }
+    for key in openFolders.keys.sorted(by: { $0.depth < $1.depth })
+    where openFolders[key] != nil && !keep.contains(key) {
+      closeFolderQuietly(key)
+    }
   }
 
   // MARK: Sort

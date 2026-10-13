@@ -221,6 +221,28 @@ final class AccessibilityTests: XCTestCase {
   }
 
   @MainActor
+  func testAuditPassesWithTheFolderShownAsColumnsAndAPreview() throws {
+    let app = launch(on: tree.root.path)
+    XCTAssertTrue(
+      app.outlines[AccessibilityElement.fileList.identifier].staticTexts["alpha.txt"]
+        .waitForExistence(timeout: 10))
+    app.typeKey("3", modifierFlags: .command)
+    let browser = app.browsers[AccessibilityElement.columnBrowser.identifier]
+    XCTAssertTrue(browser.waitForExistence(timeout: 10))
+    XCTAssertEqual(browser.label, AccessibilityElement.columnBrowser.label)
+    let sub = browser.textFields.matching(NSPredicate(format: "value == %@", "Sub")).firstMatch
+    XCTAssertTrue(sub.waitForExistence(timeout: 10))
+    sub.click()
+    let inner = browser.textFields.matching(NSPredicate(format: "value == %@", "inner.txt"))
+      .firstMatch
+    XCTAssertTrue(inner.waitForExistence(timeout: 10))
+    inner.click()
+    XCTAssertTrue(
+      app.staticTexts[AccessibilityElement.previewName.identifier].waitForExistence(timeout: 10))
+    try audit(app, "Columns with a preview")
+  }
+
+  @MainActor
   func testAuditPassesOnTheSettingsWindowAndItsCheckboxIsFoundByIdentifier() throws {
     let app = launch(on: tree.root.path)
     XCTAssertTrue(
