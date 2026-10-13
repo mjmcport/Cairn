@@ -40,6 +40,13 @@ extension AccessibilityElement {
     identifier: "modified-text", label: "Date Modified")
   public static let addedCell = AccessibilityElement(
     identifier: "added-text", label: "Date Added")
+  public static let iconView = AccessibilityElement(
+    identifier: "icon-view", label: "Files")
+  /// Every cell of the icon view shares this identifier, as list cells share
+  /// theirs. A cell speaks its item's name and kind, so the label is never
+  /// the fixed one.
+  public static let iconCell = AccessibilityElement(
+    identifier: "icon-cell", label: "Item")
   public static let backButton = AccessibilityElement(
     identifier: "go-back", label: "Back")
   public static let forwardButton = AccessibilityElement(
@@ -69,7 +76,8 @@ extension AccessibilityElement {
   /// and labels are present.
   public static let all: [AccessibilityElement] = [
     .mainWindow, .browserView, .fileList, .browserStatus, .nameCell, .sizeCell, .sizeOnDiskCell,
-    .modifiedCell, .addedCell, .backButton, .forwardButton, .tabBar, .tab, .closeTabButton,
+    .modifiedCell, .addedCell, .iconView, .iconCell, .backButton, .forwardButton, .tabBar, .tab,
+    .closeTabButton,
     .newTabButton, .settingsWindow,
     .settingsContent, .rememberOpenFoldersToggle,
   ]

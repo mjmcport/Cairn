@@ -85,6 +85,17 @@ enum MainMenu {
     // Like the Go commands, View has no target: it reaches the showing browser.
     let viewMenu = NSMenu()
     viewMenu.addItem(
+      withTitle: "as List",
+      action: #selector(BrowserViewController.showAsList(_:)),
+      keyEquivalent: "1"
+    )
+    viewMenu.addItem(
+      withTitle: "as Icons",
+      action: #selector(BrowserViewController.showAsIcons(_:)),
+      keyEquivalent: "2"
+    )
+    viewMenu.addItem(.separator())
+    viewMenu.addItem(
       withTitle: "Keep Folders on Top",
       action: #selector(BrowserViewController.toggleFoldersFirst(_:)),
       keyEquivalent: ""

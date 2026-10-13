@@ -46,4 +46,30 @@ import Testing
     #expect(
       base != FileItem(url: url, kind: .file, size: 1, dateAdded: Date(timeIntervalSince1970: 1)))
   }
+
+  // MARK: Online only
+
+  @Test func aFileWithASizeAndNoBlocksIsOnlineOnly() {
+    #expect(FileItem.isOnlineOnly(size: 1_000, allocatedSize: 0, downloadingStatus: nil))
+    #expect(!FileItem.isOnlineOnly(size: 1_000, allocatedSize: 4_096, downloadingStatus: nil))
+    // An empty file has no blocks and nothing to download.
+    #expect(!FileItem.isOnlineOnly(size: 0, allocatedSize: 0, downloadingStatus: nil))
+    #expect(!FileItem.isOnlineOnly(size: nil, allocatedSize: nil, downloadingStatus: nil))
+  }
+
+  @Test func theDownloadingStatusMarksAFileOnlineOnlyWhateverTheSizesSay() {
+    #expect(
+      FileItem.isOnlineOnly(size: 1_000, allocatedSize: 4_096, downloadingStatus: .notDownloaded))
+    #expect(FileItem.isOnlineOnly(size: nil, allocatedSize: nil, downloadingStatus: .notDownloaded))
+    #expect(!FileItem.isOnlineOnly(size: 1_000, allocatedSize: 4_096, downloadingStatus: .current))
+    #expect(
+      !FileItem.isOnlineOnly(size: 1_000, allocatedSize: 4_096, downloadingStatus: .downloaded))
+  }
+
+  @Test func anItemIsNotOnlineOnlyUnlessItIsSaidToBe() {
+    #expect(!FileItem(url: URL(filePath: "/tmp/a"), kind: .file).isOnlineOnly)
+    #expect(
+      FileItem(url: URL(filePath: "/tmp/a"), kind: .file, isOnlineOnly: true)
+        != FileItem(url: URL(filePath: "/tmp/a"), kind: .file))
+  }
 }

@@ -67,6 +67,22 @@ import Testing
     }
   }
 
+  @Test func aListingMarksOnlyAFileWithoutBlocksAsOnlineOnly() async throws {
+    let tree = try FixtureTree.build {
+      FixtureNode.file("written.bin", size: 100_000)
+      FixtureNode.file("empty.txt")
+      FixtureNode.directory("Folder") {
+        FixtureNode.file("nested.txt")
+      }
+      FixtureNode.bundle("Sample")
+    }
+    defer { try? tree.remove() }
+
+    let items = try await DirectoryReader().items(in: tree.root)
+    // Nothing a person creates here is a placeholder.
+    #expect(items.allSatisfy { !$0.isOnlineOnly })
+  }
+
   @Test func reportsHiddenItemsSoTheCallerCanFilterThem() async throws {
     let tree = try FixtureTree.build {
       FixtureNode.file("visible.txt")

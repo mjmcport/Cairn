@@ -10,7 +10,7 @@ App target      Windows, menus, the Settings window, launch, diagnostics subscri
 BrowserUI       Panes, the file list, models that drive the views
     │                                          ── AppKit boundary ──
     ├── FileOperations     Copy, move, trash, rename, undo        (stub)
-    ├── FileMetadata       Sizes, dates, tags, ACLs, cloud state  (stub)
+    ├── FileMetadata       Thumbnails today; Get Info readers in Phase 1
     │         │
     └── FileSystemCore     Items, listing, sorting, watching, logging, the main-thread guard
 
@@ -22,10 +22,10 @@ An arrow means "depends on". `BrowserUI` also uses `FileSystemCore` directly. No
 | Module | Responsibility | May import |
 | --- | --- | --- |
 | `App/` | Entry point, main menu, the window, the Settings window, MetricKit subscriber | AppKit, SwiftUI, MetricKit, BrowserUI, FileSystemCore |
-| `BrowserUI` | `PaneViewController` (one pane: its tabs, the window's title and keyboard focus), `TabList` (the order of a pane's tabs and which one is showing; no AppKit in it), `TabBarView` (the row of tabs, their close buttons and the New Tab button), `BrowserModel` (state of one browser: the folder shown, the folders open in it, the selection), `FolderKey` and `OpenFolder` (a folder open in place, by its names from the folder shown), `BrowserHistory` (its back and forward places, with the selection and the open folders left at each), `BrowserViewController` (the list, an outline; one per tab), `OutlineNode` (the handle of one outline row), `BrowserToolbar` (the Back and Forward buttons), `BrowserSettings` and `SettingsView` (the one setting, and its window's content), `AccessibilityElement`, `InitialLocation` | AppKit, SwiftUI, the three core packages |
+| `BrowserUI` | `PaneViewController` (one pane: its tabs, the window's title and keyboard focus), `TabList` (the order of a pane's tabs and which one is showing; no AppKit in it), `TabBarView` (the row of tabs, their close buttons and the New Tab button), `BrowserModel` (state of one browser: the folder shown, the folders open in it, the selection), `FolderKey` and `OpenFolder` (a folder open in place, by its names from the folder shown), `BrowserHistory` (its back and forward places, with the selection and the open folders left at each), `BrowserViewController` (the list, an outline; one per tab), `OutlineNode` (the handle of one outline row), `IconCollectionView`, `IconItem`, `GenericIcons`, `ThumbnailLoader` and `ThumbnailCache`, `TypeAhead` (the icon presentation and its pictures), `BrowserToolbar` (the Back and Forward buttons), `BrowserSettings` and `SettingsView` (the one setting, and its window's content), `AccessibilityElement`, `InitialLocation` | AppKit, SwiftUI, the three core packages |
 | `FileOperations` | `FileOperation` today; the operation engine in Phase 1 | Foundation, FileSystemCore |
-| `FileMetadata` | `MetadataGroup` today; Get Info readers in Phase 1 | Foundation, FileSystemCore |
-| `FileSystemCore` | `FileItem` (with its size on disk and the date it was added), `DirectoryReader`, `FileItemSort` (name, size, size on disk, dates modified and added), `FolderWatcher` (one FSEvents stream per watched folder), `MainThreadGuard`, `Log`, `LocalDiagnosticsStore` | Foundation, os, CoreServices |
+| `FileMetadata` | `ThumbnailProviding` and `QuickLookThumbnailer` (a picture of a file, as a `CGImage`), `MetadataGroup`; Get Info readers in Phase 1 | Foundation, CoreGraphics, QuickLookThumbnailing, FileSystemCore |
+| `FileSystemCore` | `FileItem` (with its size on disk, the date it was added and whether it is online only), `DirectoryReader`, `FileItemSort` (name, size, size on disk, dates modified and added), `FolderWatcher` (one FSEvents stream per watched folder), `MainThreadGuard`, `Log`, `LocalDiagnosticsStore` | Foundation, os, CoreServices |
 | `TestSupport` | `FixtureTree`, `FixtureNode`, `FixtureNames`, `TemporaryDirectory` | Foundation |
 
 ## How a folder gets on screen
@@ -73,9 +73,21 @@ A history entry holds the keys of the folders that were open when the place was 
 
 The setting is `BrowserSettings.rememberOpenFolders`, in the user defaults, on until it is turned off. It is read when the move is made. The Settings window (Cairn > Settings…) is a SwiftUI view hosted in an AppKit window and holds that one checkbox.
 
+## How a folder is shown as icons
+
+`View > as Icons` (Command-2) shows the showing tab's folder as a grid of pictures and names, and `as List` (Command-1) returns. The mode is the tab's own and lives in `BrowserModel.viewMode`; the model's items, selection, sort, history and watches are the same for both.
+
+1. A browser owns both views, the outline and an `NSCollectionView`, and shows one. A switch is a hide and a reload: nothing is listed again. Switching to icons closes the folders that were open in place, because the icon view shows the top level only; what was selected inside falls back to the folder.
+2. The collection view has a fixed item size, so laying out 100,000 items is arithmetic: only the cells in or near view are made (140 in a probe). A reload clears its selection, so the controller applies the model's, as the list does, and a publish that empties the rows reloads it at once.
+3. A cell has a picture the moment it is configured: the system's icon for the type, chosen from the item's kind and the extension of its name, with no file access. It asks `ThumbnailLoader` for a better one only when it is about to be shown, and cancels when it goes away.
+4. `ThumbnailLoader` is an actor. It answers from a cache bounded in entries and in bytes, least recently used out first, keyed by the item's place, modified date, size and the pixel size asked for, so a changed file is a different key. Otherwise it asks a `ThumbnailProviding`, at most four at a time, the newest request first, off the main actor. Four in flight is where the system's generator stopped getting faster in a measurement.
+5. A file that is online only is never given to the provider: drawing a file can make the system download it. The cell does not ask for it and the loader refuses it as well. `FileItem.isOnlineOnly` comes from values the listing already reads (a size and no allocated blocks); iCloud's own downloading status said it outright but cost nine times the listing, so it is not read there.
+6. A cell is one accessibility element that speaks the name, the kind and whether the file is online only. Its picture and cloud mark are decoration and are not elements.
+7. `NSCollectionView` has no type-to-select and no double-click action. A small subclass forwards typed characters and a double-click, and `TypeAhead` (a value with no clock of its own) decides what has been typed.
+
 ## Tabs
 
-A pane keeps every tab's browser alive as a child view controller, so a tab that is not showing keeps its folder, history, selection, open folders, sort and scroll position, and finishes a listing it had started. Only the showing tab is watched for changes on disk, and only while the pane is on screen; a tab that is shown again refreshes its list as its watch starts. Closing a tab cancels its listing and stops its watch. Closing the last tab closes the window.
+A pane keeps every tab's browser alive as a child view controller, so a tab that is not showing keeps its folder, history, selection, open folders, sort, view mode and scroll position, and finishes a listing it had started. Only the showing tab is watched for changes on disk, and only while the pane is on screen; a tab that is shown again refreshes its list as its watch starts. Closing a tab cancels its listing and stops its watch. Closing the last tab closes the window.
 
 - `TabList` holds the rules: a new tab goes last and is shown, closing the showing tab shows its right neighbour or else its left, and next and previous wrap around. The tab bar is hidden while there is one tab.
 - A tab command (`newTab`, `closeTab`, `showNextTab`, `showPreviousTab`) changes the tab list as it arrives and brings the window in line before it returns. Only a browser's listing runs in a task, so the same command sent twice in a row does what two commands should.
@@ -125,4 +137,4 @@ Each decision that shaped this structure has a record in [`docs/adr`](docs/adr):
 
 ## What is not here yet
 
-Phase 0 is a skeleton. The sidebar, icon and column views, Get Info, file operations, undo, state restoration, signing and updates all arrive in Phase 1. The plan is the Claude Doc "Mac file manager implementation plan".
+Phase 0 is a skeleton. The sidebar, the column view, Get Info, file operations, undo, state restoration, signing and updates all arrive in Phase 1. The plan is the Claude Doc "Mac file manager implementation plan".
