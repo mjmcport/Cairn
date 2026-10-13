@@ -51,7 +51,15 @@ Reference Mac, macOS 27, Debug test builds unless noted.
 5. *Is a SwiftUI checkbox found by identifier?* Yes, by identifier and by title, with value 1 for on. The hosting view had to be named for the audit.
 6. *What does VoiceOver say for a row's level and state, and when a folder opens?* **Not answered.** The VoiceOver checks were skipped again. They remain open with step 4's.
 
-## A pre-existing audit flake
+## What the CI runners showed, and what was done about it
+
+The first pull request run failed on both macOS 26 and macOS 15, deterministically, in three ways. Each one was a different cause.
+
+- **A column hanging out of the window.** Date Added was flagged for contrast. The five columns were 930 points wide in a 900-point window: the last one ran about 30 points past the edge and the list grew a horizontal scroller. A probe of the running app measured it. My Mac's audit tolerated it; the runners did not. The columns now fit with room to spare, Name takes any width the window gains, and a unit test (which fails on the old widths) and an end-to-end assertion keep it that way.
+- **A trap on macOS 15 only.** The BrowserUI unit tests died with `Index out of range`. The model empties its rows at a move and does not publish until the listing starts, and an `NSOutlineView` keeps the counts it was given and asks for rows later. The table had asked the data source for its live count every time. The commands now reload the outline at the move, and the data source answers an index beyond the rows with an empty row that cannot be selected. Two tests pin both. macOS 27 and 26 never asked late; macOS 15 did.
+- **A contrast failure on `Empty`.** Two audits failed on both runners with "Contrast failed for Empty". The runner's recording showed dark text on white, and a color histogram of the failing element's screenshot (put in the failure message for this) showed text pixels at `#272727` on `#FFFFFF`, about 14.6:1 where 4.5:1 is asked, and few full-strength ink pixels because the glyphs are thin on a 1x screen. The system's estimate of the text color is an average that anti-aliasing pulls lighter. The same word passed on these runners before the outline, and that was not explained. The audit handler now re-measures contrast for a flagged static text from the element's own screenshot (its most contrasting pixel against its most common) and accepts it at 4.5:1 or more; text that is really too light still fails because its strongest pixel is light. This was chosen by the user over investigating further or merging red.
+
+## A pre-existing audit flake on the development Mac
 
 `testAuditPassesOnAPopulatedFolder` fails in full end-to-end runs on the macOS 27 development Mac with "Contrast failed" on one name (`Empty`, `beta.txt`), and `testAuditPassesWithTwoTabs` once on a size (`Zero kB`). It is not from the outline: `main`, with the table, failed the same audit in 2 of 2 full runs, and this branch failed one audit in 3 of 4 full runs and in none of 6 runs of the accessibility suite alone. CI on macOS 26 passed the audit at the step 4 merge. It was recorded and not fixed (chosen by the user); `docs/solutions/2026-10-09-accessibility-notes.md` already says contrast depends on where the stripes fall.
 

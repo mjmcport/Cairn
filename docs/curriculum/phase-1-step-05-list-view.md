@@ -88,6 +88,16 @@ A unit test could not find the checkbox in the Settings window: the system build
 
 **Lesson:** test a thing from the same side it will be used from.
 
+## What the shared machines found
+
+Everything above passed on the development Mac. The first run on the shared machines, which run the tests on two other versions of macOS, failed in three separate ways.
+
+One column of the list was thirty points wider than the window, so the last column was cut off. The Mac that built it had been forgiving. Another version of macOS asked the list for a row after the program had already emptied it, and the program stopped. And the accessibility check said one name was too faint, though a picture of the screen showed plain dark text on white and the numbers said it was far above the standard.
+
+The first two were real faults and were fixed, each with a test that fails without the fix. For the third, the picture and the numbers were put into the failure message, and the check now measures the contrast again from the element's own pixels, so a faint text still fails and a clear one that the check mis-estimated does not.
+
+**Lesson:** a second machine is a second pair of eyes. Do not argue with it; ask it for its evidence.
+
 ## What the checks found
 
 The tests, and breaking the code on purpose to see them fail, turned up three things worth keeping: the owed signal paid twice, a guard that a test did not isolate, and a test that read the wrong notification name. The guard, a token that makes a stale listing publish nothing, turns out to be redundant with cancellation when a folder is closed. It stays, because a relisting after a reload is not preceded by a close. The note says so.
