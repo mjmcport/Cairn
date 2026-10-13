@@ -116,6 +116,22 @@ import Testing
     #expect(rig.outline.tableColumns.allSatisfy { $0.sortDescriptorPrototype != nil })
   }
 
+  @Test func everyColumnFitsInTheWindowsDefaultWidth() async throws {
+    let rig = try await rig()
+    // The width the app gives its window: AppDelegate.
+    rig.window.setContentSize(NSSize(width: 900, height: 600))
+    rig.window.layoutIfNeeded()
+    let outline = rig.outline
+    let scroll = try #require(outline.enclosingScrollView)
+    scroll.layoutSubtreeIfNeeded()
+
+    let last = outline.rect(ofColumn: outline.numberOfColumns - 1)
+    // A column that hangs outside the window is cut off, and the list grows a
+    // horizontal scroller. Both showed up as contrast failures in the audit.
+    #expect(last.maxX <= scroll.contentView.bounds.width + 0.5)
+    #expect(outline.bounds.width <= scroll.contentView.bounds.width + 0.5)
+  }
+
   @Test func onlyAFolderHasADisclosureTriangle() async throws {
     let rig = try await rig()
     for node in nodes(of: rig.outline) {

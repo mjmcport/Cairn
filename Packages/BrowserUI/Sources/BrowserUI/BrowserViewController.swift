@@ -46,13 +46,17 @@ public final class BrowserViewController: NSViewController {
       }
     }
 
+    /// The starting widths. Together with the table's spacing they fit the
+    /// window's default width, so no column hangs outside it and the list
+    /// needs no horizontal scroller; the Name column takes any width the
+    /// window gains.
     var width: CGFloat {
       switch self {
-      case .name: 320
-      case .size: 90
-      case .sizeOnDisk: 100
-      case .modified: 170
-      case .added: 170
+      case .name: 240
+      case .size: 80
+      case .sizeOnDisk: 90
+      case .modified: 160
+      case .added: 160
       }
     }
 
@@ -132,6 +136,8 @@ public final class BrowserViewController: NSViewController {
       tableColumn.title = column.title
       tableColumn.width = column.width
       tableColumn.minWidth = 60
+      tableColumn.resizingMask =
+        column == .name ? [.autoresizingMask, .userResizingMask] : .userResizingMask
       tableColumn.sortDescriptorPrototype = NSSortDescriptor(key: column.rawValue, ascending: true)
       outlineView.addTableColumn(tableColumn)
       if column == .name {
@@ -139,6 +145,7 @@ public final class BrowserViewController: NSViewController {
         outlineView.outlineTableColumn = tableColumn
       }
     }
+    outlineView.columnAutoresizingStyle = .firstColumnOnlyAutoresizingStyle
     outlineView.apply(.fileList)
     outlineView.style = .fullWidth
     outlineView.usesAlternatingRowBackgroundColors = true

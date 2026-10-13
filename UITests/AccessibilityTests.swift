@@ -99,6 +99,12 @@ final class AccessibilityTests: XCTestCase {
     let table = app.outlines[AccessibilityElement.fileList.identifier]
     XCTAssertTrue(table.staticTexts["alpha.txt"].waitForExistence(timeout: 10))
     XCTAssertEqual(table.label, AccessibilityElement.fileList.label)
+    // Every column is inside the window, the last included: a column cut off
+    // by the window's edge fails the contrast audit on the CI runners.
+    let window = app.windows[AccessibilityElement.mainWindow.identifier]
+    let added = table.staticTexts.matching(identifier: "added-text").firstMatch
+    XCTAssertTrue(added.waitForExistence(timeout: 10))
+    XCTAssertLessThanOrEqual(added.frame.maxX, window.frame.maxX)
     try audit(app, "Populated folder")
   }
 
