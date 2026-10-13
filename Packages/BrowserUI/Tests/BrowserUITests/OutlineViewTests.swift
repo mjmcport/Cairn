@@ -438,6 +438,36 @@ import Testing
     #expect(rig.model.openFolders.isEmpty)
   }
 
+  @Test func aMoveEmptiesTheOutlineAtOnceWithoutWaitingForTheListing() async throws {
+    let rig = try await rig()
+    rig.model.openFolder(subKey)
+    await rig.model.waitForOpenFolders()
+    let row = rig.outline.row(forItem: try node(subKey, in: rig.outline))
+    rig.outline.selectRowIndexes([row], byExtendingSelection: false)
+    try #require(rig.outline.numberOfRows > 0)
+
+    // The model empties its rows at the move and does not publish until the
+    // listing starts; the outline must not keep asking for rows that are gone.
+    rig.controller.openSelection(nil)
+    #expect(rig.outline.numberOfRows == 0)
+    await rig.controller.loadTask?.value
+    #expect(rows(of: rig.outline) == ["b.txt", "Deep", "x.txt"])
+  }
+
+  @Test func anIndexBeyondTheRowsIsAnsweredWithAnEmptyRowThatCannotBeSelected() async throws {
+    let rig = try await rig()
+    let beyond = rig.controller.outlineView(rig.outline, child: 99, ofItem: nil)
+    let node = try #require(beyond as? OutlineNode)
+    #expect(node.isStatus)
+    #expect(!rig.controller.outlineView(rig.outline, shouldSelectItem: node))
+
+    rig.model.openFolder(subKey)
+    await rig.model.waitForOpenFolders()
+    let folder = try self.node(subKey, in: rig.outline)
+    let inside = rig.controller.outlineView(rig.outline, child: 99, ofItem: folder)
+    #expect((inside as? OutlineNode)?.isStatus == true)
+  }
+
   @Test func openOnAFileOrAPackageDoesNothing() async throws {
     let rig = try await rig()
     let row = rig.outline.row(forItem: try node(FolderKey(names: ["App.app"]), in: rig.outline))

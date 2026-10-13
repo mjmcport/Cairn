@@ -86,9 +86,12 @@ final class AccessibilityTests: XCTestCase {
       {
         return true
       }
+      let windowFrame = app.windows[AccessibilityElement.mainWindow.identifier].frame
       XCTFail(
         "\(screen): \(issue.compactDescription) [type \(element.elementType.rawValue), "
-          + "id '\(element.identifier)', label '\(element.label)'] \(issue.detailedDescription)")
+          + "id '\(element.identifier)', label '\(element.label)'] \(issue.detailedDescription)"
+          + " | frame \(element.frame) in window \(windowFrame)"
+          + " | \(String(element.debugDescription.prefix(500)))")
       return true
     }
   }

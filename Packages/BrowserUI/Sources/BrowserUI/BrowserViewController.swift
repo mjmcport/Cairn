@@ -209,7 +209,7 @@ public final class BrowserViewController: NSViewController {
   @objc public func goToEnclosingFolder(_ sender: Any?) {
     // At the root there is nowhere to go, so a load under way is left to finish.
     guard model.moveToEnclosingFolder() else { return }
-    updateTitle()
+    movedAway()
     run { await $0.load() }
   }
 
@@ -217,14 +217,14 @@ public final class BrowserViewController: NSViewController {
   @objc public func goBack(_ sender: Any?) {
     // With no history there is nowhere to go, so a load under way is left to finish.
     guard model.moveBack() else { return }
-    updateTitle()
+    movedAway()
     run { await $0.load() }
   }
 
   /// Undoes Back. Sent by Go > Forward and the toolbar.
   @objc public func goForward(_ sender: Any?) {
     guard model.moveForward() else { return }
-    updateTitle()
+    movedAway()
     run { await $0.load() }
   }
 
@@ -245,7 +245,7 @@ public final class BrowserViewController: NSViewController {
     // Opening a file does nothing yet, so a load under way is left to finish.
     guard item.isNavigable else { return }
     model.move(to: item.url)
-    updateTitle()
+    movedAway()
     run { await $0.load() }
   }
 
@@ -324,6 +324,15 @@ public final class BrowserViewController: NSViewController {
       statusLabel.stringValue = message
       statusLabel.isHidden = false
     }
+  }
+
+  /// A command has moved the model, which has emptied its rows and will not
+  /// publish until the listing starts. The outline is told now: it keeps the
+  /// counts it was given and may ask for a row by an index that no longer
+  /// exists, as AppKit on macOS 15 was seen to.
+  private func movedAway() {
+    updateTitle()
+    reloadEverything()
   }
 
   /// Reloads every row. The scroll offset and keyboard focus are kept by the
@@ -496,6 +505,11 @@ public final class BrowserViewController: NSViewController {
     return node(for: key, item: item)
   }
 
+  /// What the outline is given for an index it asks for after the rows
+  /// changed under it: an empty row that cannot be selected. A reload follows
+  /// at once and replaces it.
+  private static let staleRow = OutlineNode(statusFor: .root, message: "")
+
   private func statusNode(for key: FolderKey, message: String) -> OutlineNode {
     if let existing = statusNodes[key] {
       existing.message = message
@@ -545,14 +559,16 @@ extension BrowserViewController: NSOutlineViewDataSource, NSOutlineViewDelegate 
     -> Any
   {
     guard let parent = item as? OutlineNode else {
+      guard model.items.indices.contains(index) else { return Self.staleRow }
       let row = model.items[index]
       return node(for: FolderKey.root.appending(row.name), item: row)
     }
     if let reason = model.failure(of: parent.key) {
       return statusNode(for: parent.key, message: reason)
     }
-    let row = model.children(of: parent.key)[index]
-    return node(for: parent.key.appending(row.name), item: row)
+    let rows = model.children(of: parent.key)
+    guard rows.indices.contains(index) else { return Self.staleRow }
+    return node(for: parent.key.appending(rows[index].name), item: rows[index])
   }
 
   public func outlineView(_ outlineView: NSOutlineView, isItemExpandable item: Any) -> Bool {
