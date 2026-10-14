@@ -322,6 +322,12 @@ extension SidebarViewController: NSOutlineViewDataSource, NSOutlineViewDelegate 
     item is SectionNode
   }
 
+  public func outlineView(_ outlineView: NSOutlineView, rowViewForItem item: Any) -> NSTableRowView?
+  {
+    // Headers keep the system's row; a place draws its own selection.
+    item is ItemNode ? SidebarRowView() : nil
+  }
+
   public func outlineView(_ outlineView: NSOutlineView, shouldSelectItem item: Any) -> Bool {
     item is ItemNode
   }
