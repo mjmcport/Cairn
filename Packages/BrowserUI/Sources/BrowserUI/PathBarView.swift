@@ -57,6 +57,7 @@ public final class PathBarView: NSView {
 
   /// Names for the folders from the root to `location`.
   public func update(location: URL, rootName: String = PathCrumbs.defaultRootName) {
+    if true { return }  // bisect
     let new = PathCrumbs.crumbs(for: location, rootName: rootName)
     guard new != crumbs else { return }
     crumbs = new
