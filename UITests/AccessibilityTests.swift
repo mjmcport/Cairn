@@ -26,7 +26,11 @@ final class AccessibilityTests: XCTestCase {
   @MainActor
   private func launch(on path: String) -> XCUIApplication {
     let app = XCUIApplication()
-    app.launchArguments = ["-OpenFolder", path, "-ApplePersistenceIgnoreState", "YES"]
+    // Recents and tags search the fixture folder alone, so what they list
+    // is the same on every Mac and not whatever the person used lately.
+    app.launchArguments = [
+      "-OpenFolder", path, "-ApplePersistenceIgnoreState", "YES", "-SearchScope", tree.root.path,
+    ]
     app.launch()
     addTeardownBlock { @MainActor in app.terminate() }
     return app
@@ -240,6 +244,31 @@ final class AccessibilityTests: XCTestCase {
     XCTAssertTrue(
       app.staticTexts[AccessibilityElement.previewName.identifier].waitForExistence(timeout: 10))
     try audit(app, "Columns with a preview")
+  }
+
+  @MainActor
+  func testAuditPassesWithTheSidebarShowingAndRecentsChosen() throws {
+    let app = launch(on: tree.root.path)
+    XCTAssertTrue(
+      app.outlines[AccessibilityElement.fileList.identifier].staticTexts["alpha.txt"]
+        .waitForExistence(timeout: 10))
+    let sidebar = app.outlines[AccessibilityElement.sidebar.identifier]
+    XCTAssertTrue(sidebar.waitForExistence(timeout: 10))
+    XCTAssertEqual(sidebar.label, AccessibilityElement.sidebar.label)
+    let recents = sidebar.staticTexts["Recents"]
+    XCTAssertTrue(recents.waitForExistence(timeout: 10))
+    try audit(app, "Sidebar with a folder showing")
+
+    recents.click()
+    let window = app.windows[AccessibilityElement.mainWindow.identifier]
+    let shown = NSPredicate { _, _ in window.title == "Recents" }
+    XCTAssertEqual(
+      XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: shown, object: nil)], timeout: 10),
+      .completed, "Recents did not show")
+    // Nothing in the fixture was used lately, so the place is empty.
+    let status = app.staticTexts[AccessibilityElement.browserStatus.identifier]
+    XCTAssertTrue(status.waitForExistence(timeout: 10))
+    try audit(app, "Sidebar with the recents showing")
   }
 
   @MainActor

@@ -43,7 +43,7 @@ public final class PaneViewController: NSViewController {
   /// A pane on the real file system, whose showing tab follows changes made
   /// elsewhere.
   public convenience init(location: URL) {
-    self.init(location: location, reader: DirectoryReader(), watcher: FolderWatcher())
+    self.init(location: location, reader: CompositeReader(), watcher: FolderWatcher())
   }
 
   /// A pane whose tabs list through `reader`. They watch nothing unless the
@@ -137,6 +137,23 @@ public final class PaneViewController: NSViewController {
     close(showingBrowser)
   }
 
+  /// Shows `location` in the showing tab as a move, or in a new tab. Asked by
+  /// the sidebar.
+  public func show(_ location: URL, inNewTab: Bool) {
+    if inNewTab {
+      let browser = BrowserViewController(location: location, reader: reader, watcher: watcher)
+      adopt(browser)
+      tabs.add(browser)
+      tabsDidChange()
+    } else {
+      showingBrowser.show(location)
+    }
+  }
+
+  /// Called when the place the showing tab is on changes, and when another
+  /// tab starts showing. The sidebar follows it.
+  public var onLocationChange: (() -> Void)?
+
   /// Shows the tab to the right, wrapping around. Sent by Window > Show Next Tab.
   @objc public func showNextTab(_ sender: Any?) {
     guard tabs.showNext() else { return }
@@ -174,6 +191,7 @@ public final class PaneViewController: NSViewController {
       browser.cancelLoad()
       browser.stopWatching()
       browser.onTitleChange = nil
+      browser.onLocationChange = nil
       if browser.isViewLoaded {
         browser.view.removeFromSuperview()
       }
@@ -194,6 +212,10 @@ public final class PaneViewController: NSViewController {
       if browser === self.showingBrowser {
         self.updateTitle()
       }
+    }
+    browser.onLocationChange = { [weak self, weak browser] in
+      guard let self, let browser, browser === self.showingBrowser else { return }
+      self.onLocationChange?()
     }
   }
 
@@ -226,6 +248,7 @@ public final class PaneViewController: NSViewController {
     updateTitle()
     view.window?.validateToolbarItems()
     updateWatching()
+    onLocationChange?()
   }
 
   /// Brings the browsers in line with who should be watching: the showing

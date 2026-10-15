@@ -35,7 +35,10 @@ PACKAGES := $(patsubst Packages/%/Package.swift,%,$(wildcard Packages/*/Package.
 # process and shares its main actor, so a timing assertion measures how busy
 # the other suites keep it. These run alone, after the rest, in the packages
 # that have them. Their bounds are not loosened to fit the parallel run.
-TIMING_SUITES := LiveUpdateTests
+# SidebarTests and WindowContentTests assert on no clock, but build windows
+# and outline views on the main actor: on the hosted runner they added enough
+# to the parallel run to push the watch tests past their bounded waits.
+TIMING_SUITES := LiveUpdateTests SidebarTests WindowContentTests
 TIMING_PACKAGES := BrowserUI
 
 XCODEBUILD := xcodebuild -project $(PROJECT) -destination '$(DESTINATION)' \

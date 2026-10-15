@@ -30,7 +30,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     diagnostics.start()
 
     let window = NSWindow(
-      contentRect: NSRect(x: 0, y: 0, width: 900, height: 600),
+      contentRect: NSRect(x: 0, y: 0, width: 1100, height: 600),
       styleMask: [.titled, .closable, .miniaturizable, .resizable],
       backing: .buffered,
       defer: false
@@ -39,9 +39,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       defaults: .standard,
       fallback: FileManager.default.homeDirectoryForCurrentUser
     )
-    // The pane titles the window with the showing tab's folder name.
-    window.contentViewController = PaneViewController(location: location)
-    window.setContentSize(NSSize(width: 900, height: 600))
+    // The pane, inside the split view, titles the window with the showing
+    // tab's folder name.
+    window.contentViewController = WindowContentViewController(location: location)
+    // The list's columns fit 900 points beside a sidebar of about 200.
+    window.setContentSize(NSSize(width: 1100, height: 600))
     window.apply(.mainWindow)
     window.toolbar = toolbar.makeToolbar()
     window.toolbarStyle = .unified

@@ -37,6 +37,7 @@ Twelve steps that produce almost nothing you can see, and everything the visible
 | 5 | [A drawer without leaving the room](phase-1-step-05-list-view.md) | Name a place so it cannot be spelled two ways; a test that measures time measures its neighbours; check the old version first |
 | 6 | [A photograph album](phase-1-step-06-icon-view.md) | Show something true at once and improve it; measure every fact you read for every item; make the harm impossible two ways |
 | 7 | [Following the path](phase-1-step-07-column-view.md) | Reuse the structure you already built; a click is a request; probe the old part before building on it |
+| 8 | [The directory in the lobby](phase-1-step-08-sidebar.md) | A new place can be a new address; say what is wrong; give a test its own world |
 
 ## Ideas that keep coming back
 
@@ -47,7 +48,7 @@ A few lessons appear in step after step. Watching one recur is the best way to l
 - **A late answer to an old question.** Phase 0 step 5; Phase 1 steps 1, 3, 4 and 5.
 - **Measure, and record the conditions.** Phase 0 steps 7 and 9; Phase 1 steps 3, 4, 5 and 6.
 - **Say plainly what is not done.** Nearly every page.
-- **It passed here, not there.** The follow-up; Phase 1 steps 1, 2 and 5.
+- **It passed here, not there.** The follow-up; Phase 1 steps 1, 2, 5 and 8.
 
 ## How a page is written
 
