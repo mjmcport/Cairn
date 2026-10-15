@@ -35,6 +35,14 @@ Step 9 added three ways to say where a place is: a bar of folder names under the
 - **Behind a sheet the window is dimmer, so its texts fail contrast.** The audit reported the sidebar's header at 878787-ish on a dimmed ground. The handler now ignores contrast issues for elements outside an open sheet's frame; the same window is judged with no sheet open in the other audits.
 - **An active field editor gives a Parent/Child mismatch with no element.** With keyboard focus in the sheet's text field the audit reports "This element is not an accessibility child of the parent element" and names no element; with focus on the suggestion list it is clean. It is the system's field editor, not a control the app builds, so the sheet is audited with focus on the suggestions and the typing state is covered by unit tests and the end-to-end typing test. Recorded as a known gap, not hidden.
 
+## The macOS 15 run found what macOS 26 and 27 hid
+
+- **`deletingLastPathComponent` never reaches a fixed point on macOS 15.** The first crumbs function walked up until a parent equalled its child. On macOS 26 and 27 the parent of `/` is `/`; on macOS 15 it is `/../`, and then `/../../`, so the loop never ended. The first path bar update hung the main actor, and every main-actor test in the BrowserUI package stalled with it: 375 tests started, none finished, and after about five minutes the run ended with no failure message. Build the list from `pathComponents` and stop when they run out.
+- **How it was found.** A hang prints nothing. Running the package with `--no-parallel` made the log order meaningful: the last test started and never finished was the first one to create a pane. Removing pieces of the production code, one round per piece (about ten minutes on the hosted runner), narrowed it to the bar's update, and the next run showed the unfinished test in the other package, the crumbs test. Two changes made on the way stay, because they are right on their own: the unit tests no longer touch the system pasteboard (a protocol, `PathPasteboard`, with a recording stub), and a sheet is closed through its presenter only.
+- **Do not wait on a signal in a cooperative thread.** The stale-answer test first held a completer's answer on a `DispatchSemaphore`; a thread of the cooperative pool held until something else happens can deadlock a run with few cores. It sleeps for a fixed time instead.
+- **`performClick` spins the run loop.** The tests press a button by sending its action, which is what the click does, without the highlight delay.
+- **A local pass on macOS 27 is not a pass on macOS 15.** The macOS 15 workflow is the only place a loop over a URL's parents can fail. It was started by hand on the branch before the merge, as the project rule says, and caught this.
+
 ## Open or not done
 
 - **VoiceOver** on the bar, its menus and the sheet. Open with steps 4 to 8.
