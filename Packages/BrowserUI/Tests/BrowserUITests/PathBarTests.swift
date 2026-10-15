@@ -55,6 +55,13 @@ private final class StubCompleter: FolderCompleting, @unchecked Sendable {
     return pane
   }
 
+  /// Presses a button without `performClick`, which highlights the button
+  /// by spinning the run loop and has stalled the main actor on macOS 15.
+  private func press(_ button: NSButton?) {
+    guard let button else { return }
+    button.sendAction(button.action, to: button.target)
+  }
+
   /// The titles after the root's name, which is read from the system.
   private func titles(_ pane: PaneViewController) -> [String] {
     Array(pane.pathBar.crumbs.map(\.title).dropFirst())
@@ -79,10 +86,10 @@ private final class StubCompleter: FolderCompleting, @unchecked Sendable {
     let bar = pane.pathBar
     #expect(!pane.showingBrowser.model.canGoBack)
 
-    bar.nameButtons.last?.performClick(nil)
+    press(bar.nameButtons.last)
     #expect(!pane.showingBrowser.model.canGoBack)
 
-    bar.nameButtons[bar.nameButtons.count - 2].performClick(nil)
+    press(bar.nameButtons[bar.nameButtons.count - 2])
     #expect(pane.showingBrowser.location == root)
     #expect(pane.showingBrowser.model.canGoBack)
     pane.showingBrowser.goBack(nil)
@@ -148,7 +155,7 @@ private final class StubCompleter: FolderCompleting, @unchecked Sendable {
 
     var shown: NSMenu?
     bar.presentMenu = { menu, _ in shown = menu }
-    bar.overflowButton.performClick(nil)
+    press(bar.overflowButton)
     #expect(
       shown?.items.map(\.title)
         == ["Macintosh HD", "fixture", "Docs", "Reports", "2026"]
