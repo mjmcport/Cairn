@@ -12,16 +12,15 @@ private final class StubCompleter: FolderCompleting, @unchecked Sendable {
   var canned: [URL: [String]] = [:]
   var failing: Set<URL> = []
   var existences: [String: PathExistence] = [:]
-  /// Prefixes that wait for `release()` before answering.
-  var held: Set<String> = []
-  private let semaphore = DispatchSemaphore(value: 0)
+  /// Prefixes whose answer is slow. A sleep, not a wait on a signal: a thread
+  /// of the cooperative pool must never be held until something else happens.
+  var slow: Set<String> = []
 
   var calledOnMain: Bool { lock.withLock { onMain.contains(true) } }
-  func release() { semaphore.signal() }
 
   func folders(in folder: URL, prefix: String, limit: Int) throws -> [FolderSuggestion] {
     lock.withLock { onMain.append(Thread.isMainThread) }
-    if held.contains(prefix) { semaphore.wait() }
+    if slow.contains(prefix) { Thread.sleep(forTimeInterval: 0.25) }
     if failing.contains(folder) { throw CocoaError(.fileReadNoPermission) }
     return (canned[folder] ?? [])
       .filter { prefix.isEmpty || $0.lowercased().hasPrefix(prefix.lowercased()) }
@@ -303,7 +302,7 @@ private final class StubCompleter: FolderCompleting, @unchecked Sendable {
   @Test func anAnswerForOlderTextIsDropped() async throws {
     let completer = StubCompleter()
     completer.canned[home] = ["Alpha", "Beta"]
-    completer.held = ["A"]
+    completer.slow = ["A"]
     let sheet = sheet(completer)
     sheet.field.stringValue = "~/A"
     sheet.textDidChange()
@@ -311,8 +310,7 @@ private final class StubCompleter: FolderCompleting, @unchecked Sendable {
     sheet.textDidChange()
     await sheet.settle()
     #expect(sheet.suggestions.map(\.name) == ["Beta"])
-    completer.release()
-    try await Task.sleep(for: .milliseconds(150))
+    try await Task.sleep(for: .milliseconds(500))
     #expect(sheet.suggestions.map(\.name) == ["Beta"])
   }
 
