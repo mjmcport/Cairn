@@ -48,6 +48,8 @@ final class AccessibilityTests: XCTestCase {
   ///   color of thin anti-aliased text, such as the name `Empty`, falls below
   ///   4.5:1 for text that is #272727 on white, about 14.6:1. Text that is
   ///   really too light still fails, because its darkest pixel is light.
+  /// - "Contrast failed" on a text outside an open sheet: the system draws the
+  ///   window behind a sheet dimmer.
   /// - "Label not human-readable" on a list cell that shows text. The cell
   ///   speaks a file name, such as `alpha.txt`, which is the user's own data
   ///   and the correct thing to say even though it is not a dictionary word.
@@ -144,14 +146,24 @@ final class AccessibilityTests: XCTestCase {
     let windowButtons = app.windows.buttons
       .matching(NSPredicate(format: "identifier BEGINSWITH '_XCUI:'"))
       .allElementsBoundByIndex.map(\.frame)
+    // Behind a sheet the system draws the window dimmer, so its texts fall
+    // below the contrast the app chose. They are judged when no sheet is open.
+    let sheets = app.sheets.allElementsBoundByIndex.map(\.frame)
     try app.performAccessibilityAudit { issue in
       guard let element = issue.element else {
-        XCTFail("\(screen): \(issue.compactDescription)")
+        XCTFail(
+          "\(screen): \(issue.compactDescription) [no element, type \(issue.auditType.rawValue)] "
+            + "\(issue.detailedDescription)")
         return true
       }
       if element.elementType == .touchBar { return true }
       if issue.auditType == .parentChild, element.elementType == .group,
         windowButtons.contains(where: { $0.insetBy(dx: -1, dy: -1).contains(element.frame) })
+      {
+        return true
+      }
+      if issue.auditType == .contrast, !sheets.isEmpty,
+        !sheets.contains(where: { $0.insetBy(dx: -1, dy: -1).contains(element.frame) })
       {
         return true
       }
@@ -269,6 +281,27 @@ final class AccessibilityTests: XCTestCase {
     let status = app.staticTexts[AccessibilityElement.browserStatus.identifier]
     XCTAssertTrue(status.waitForExistence(timeout: 10))
     try audit(app, "Sidebar with the recents showing")
+  }
+
+  @MainActor
+  func testAuditPassesWithThePathBarShowingAndTheGoToFolderSheetOpen() throws {
+    let app = launch(on: tree.root.path)
+    XCTAssertTrue(
+      app.outlines[AccessibilityElement.fileList.identifier].staticTexts["alpha.txt"]
+        .waitForExistence(timeout: 10))
+    let bar = app.descendants(matching: .any)[AccessibilityElement.pathBar.identifier]
+    XCTAssertTrue(bar.waitForExistence(timeout: 10), "The path bar did not appear")
+    try audit(app, "Path bar showing")
+
+    app.typeKey("g", modifierFlags: [.command, .shift])
+    let field = app.textFields[AccessibilityElement.goToFolderField.identifier]
+    XCTAssertTrue(field.waitForExistence(timeout: 10), "The sheet did not open")
+    // The system's field editor, active while the person types, is reported
+    // by the audit as an element with no parent (a Parent/Child mismatch with
+    // no element), so the sheet is audited with focus on the suggestions.
+    app.tables[AccessibilityElement.goToFolderSuggestions.identifier].staticTexts.firstMatch
+      .click()
+    try audit(app, "Go to Folder sheet open")
   }
 
   @MainActor

@@ -284,10 +284,36 @@ public final class BrowserViewController: NSViewController {
     return model.location
   }
 
+  /// The paths Copy Path acts on: the selected items, or with none selected
+  /// the folder being shown. Empty in a tag or the recents with none selected.
+  public var itemsToCopyPaths: [URL] {
+    let selected = model.selectedItems
+    if !selected.isEmpty { return selected.map(\.url) }
+    return model.isShowingVirtualLocation ? [] : [model.location]
+  }
+
+  /// Puts the paths of ``itemsToCopyPaths`` on `pasteboard` in `format`, a
+  /// line for each. Does nothing when there are none.
+  public func copyPaths(
+    as format: PathFormat, to pasteboard: any PathPasteboard = SystemPathPasteboard(),
+    home: URL = FileManager.default.homeDirectoryForCurrentUser
+  ) {
+    let urls = itemsToCopyPaths
+    guard !urls.isEmpty else { return }
+    let text = urls.map { format.string(for: $0, home: home) }.joined(separator: "\n")
+    pasteboard.replace(with: text, urls: format == .fileURL ? urls : [])
+  }
+
+  /// Copies the paths in the format the menu item's tag names. Sent by
+  /// Edit > Copy Path.
+  @objc public func copyPath(_ sender: NSMenuItem) {
+    copyPaths(as: PathFormat(rawValue: sender.tag) ?? .path)
+  }
+
   /// Shows `location` in this tab as a move, as a command does: history, the
   /// title and the toolbar follow, and Back returns. Asked by the sidebar.
-  public func show(_ location: URL) {
-    guard model.move(to: location) else { return }
+  public func show(_ location: URL, selecting: Set<URL> = []) {
+    guard model.move(to: location, selecting: selecting) else { return }
     movedAway()
     run { await $0.load() }
   }
@@ -743,6 +769,8 @@ extension BrowserViewController: NSUserInterfaceValidations {
       guard outlineView.selectedRowIndexes.count == 1 else { return false }
       let node = outlineView.item(atRow: outlineView.selectedRow) as? OutlineNode
       return node?.item?.isNavigable == true
+    case #selector(copyPath(_:)):
+      return !itemsToCopyPaths.isEmpty
     case #selector(showAsList(_:)):
       (item as? NSMenuItem)?.state = model.viewMode == .list ? .on : .off
       return true

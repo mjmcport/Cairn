@@ -101,9 +101,10 @@ import Testing
     #expect(pane.showingBrowser.parent === pane)
     #expect(pane.showingBrowser.model.items.map(\.name) == ["a.txt", "Sub"])
     #expect(window.title == "fixture")
-    // With no bar, the browser has the whole pane.
+    // With no tab bar, the browser has the whole pane above the path bar.
     pane.view.layoutSubtreeIfNeeded()
-    #expect(pane.showingBrowser.view.frame.height == pane.view.frame.height)
+    #expect(
+      pane.showingBrowser.view.frame.height == pane.view.frame.height - PathBarView.height)
   }
 
   @Test func newTabOpensATabAtTheSameFolderWithNoHistoryAndShowsIt() async throws {
@@ -131,7 +132,9 @@ import Testing
     #expect(second.model.selection.isEmpty)
     // The bar takes its height from the top of the pane.
     pane.view.layoutSubtreeIfNeeded()
-    #expect(second.view.frame.height == pane.view.frame.height - TabBarView.height)
+    #expect(
+      second.view.frame.height
+        == pane.view.frame.height - TabBarView.height - PathBarView.height)
   }
 
   @Test func newTabSentStraightAfterOpenIsAtTheFolderThatWasOpened() async throws {
@@ -282,7 +285,7 @@ import Testing
     #expect(pane.tabBar.isHidden)
     #expect(isShown(first, in: pane))
     pane.view.layoutSubtreeIfNeeded()
-    #expect(first.view.frame.height == pane.view.frame.height)
+    #expect(first.view.frame.height == pane.view.frame.height - PathBarView.height)
   }
 
   @Test func closeTabSentTwiceWithTwoTabsClosesOneTabAndAsksTheWindowToCloseOnce() async throws {

@@ -1007,12 +1007,14 @@ public final class BrowserModel {
   /// Records a move to another folder in the history, without listing it.
   /// Follow it with `load()`, also when the folder is the one already
   /// showing: that is a reload.
+  /// - Parameter selecting: Items to select once the folder is listed, such
+  ///   as the file a typed path named.
   /// - Returns: Whether the location changed.
   @discardableResult
-  public func move(to folder: URL) -> Bool {
+  public func move(to folder: URL, selecting: Set<URL> = []) -> Bool {
     guard !BrowserHistory.isSamePlace(folder, location) else { return false }
     history.visit(folder, leaving: selectionWanted, openFolders: foldersToRemember)
-    prepareToShow(selecting: [])
+    prepareToShow(selecting: selecting)
     return true
   }
 

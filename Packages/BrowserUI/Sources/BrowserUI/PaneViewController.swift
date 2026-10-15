@@ -34,6 +34,12 @@ public final class PaneViewController: NSViewController {
   /// Every tab watches through the same watcher. Nil for a pane whose tabs
   /// watch nothing.
   private let watcher: (any FolderWatching)?
+  let pathBar = PathBarView()
+  private var rootName = PathCrumbs.defaultRootName
+  private var browserBottomAbovePathBar: NSLayoutConstraint?
+  private var browserBottomAtPaneBottom: NSLayoutConstraint?
+  /// Whether the path bar is shown. Hidden by View > Hide Path Bar.
+  public private(set) var showsPathBar = true
   /// Whether AppKit has said the pane's view is on screen.
   private var isOnScreen = false
 
@@ -69,6 +75,13 @@ public final class PaneViewController: NSViewController {
     browserContainer.translatesAutoresizingMaskIntoConstraints = false
     container.addSubview(tabBar)
     container.addSubview(browserContainer)
+    pathBar.translatesAutoresizingMaskIntoConstraints = false
+    container.addSubview(pathBar)
+    pathBar.onNavigate = { [weak self] url in
+      guard let self else { return }
+      self.showingBrowser.show(url)
+      self.showingBrowser.focusList()
+    }
 
     topBelowTabBar = browserContainer.topAnchor.constraint(equalTo: tabBar.bottomAnchor)
     topAtPaneTop = browserContainer.topAnchor.constraint(equalTo: container.topAnchor)
@@ -78,8 +91,16 @@ public final class PaneViewController: NSViewController {
       tabBar.topAnchor.constraint(equalTo: container.topAnchor),
       browserContainer.leadingAnchor.constraint(equalTo: container.leadingAnchor),
       browserContainer.trailingAnchor.constraint(equalTo: container.trailingAnchor),
-      browserContainer.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+      pathBar.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+      pathBar.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+      pathBar.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+      pathBar.heightAnchor.constraint(equalToConstant: PathBarView.height),
     ])
+    browserBottomAbovePathBar = browserContainer.bottomAnchor.constraint(
+      equalTo: pathBar.topAnchor)
+    browserBottomAtPaneBottom = browserContainer.bottomAnchor.constraint(
+      equalTo: container.bottomAnchor)
+    browserBottomAbovePathBar?.isActive = true
     view = container
   }
 
@@ -87,6 +108,12 @@ public final class PaneViewController: NSViewController {
     super.viewDidLoad()
     tabBar.onAction = { [weak self] in self?.handle($0) }
     showTabs()
+    Task { [weak self] in
+      let name = await Task.detached { PathCrumbs.startupVolumeName() }.value
+      guard let self, let name else { return }
+      self.rootName = name
+      self.pathBar.update(location: self.showingBrowser.location, rootName: name)
+    }
   }
 
   public override func viewDidAppear() {
@@ -154,6 +181,34 @@ public final class PaneViewController: NSViewController {
   /// tab starts showing. The sidebar follows it.
   public var onLocationChange: (() -> Void)?
 
+  /// Shows or hides the path bar. Sent by View > Hide Path Bar.
+  @objc public func togglePathBar(_ sender: Any?) {
+    showsPathBar.toggle()
+    pathBar.isHidden = !showsPathBar
+    browserBottomAbovePathBar?.isActive = showsPathBar
+    browserBottomAtPaneBottom?.isActive = !showsPathBar
+  }
+
+  /// Opens the Go to Folder sheet on the showing tab. Sent by Go > Go to Folder.
+  @objc public func goToFolder(_ sender: Any?) {
+    guard presentedViewControllers?.isEmpty ?? true else { return }
+    let sheet = GoToFolderViewController(base: startingFolderForGoTo)
+    sheet.onGo = { [weak self] folder, selecting in
+      guard let self else { return }
+      self.showingBrowser.show(folder, selecting: selecting)
+      self.showingBrowser.focusList()
+    }
+    presentAsSheet(sheet)
+  }
+
+  /// The folder the sheet starts on: the one showing, or home for a tag or
+  /// the recents.
+  private var startingFolderForGoTo: URL {
+    let location = showingBrowser.location
+    return VirtualLocation.isVirtual(location)
+      ? FileManager.default.homeDirectoryForCurrentUser : location
+  }
+
   /// Shows the tab to the right, wrapping around. Sent by Window > Show Next Tab.
   @objc public func showNextTab(_ sender: Any?) {
     guard tabs.showNext() else { return }
@@ -215,7 +270,7 @@ public final class PaneViewController: NSViewController {
     }
     browser.onLocationChange = { [weak self, weak browser] in
       guard let self, let browser, browser === self.showingBrowser else { return }
-      self.onLocationChange?()
+      self.locationChanged()
     }
   }
 
@@ -248,6 +303,13 @@ public final class PaneViewController: NSViewController {
     updateTitle()
     view.window?.validateToolbarItems()
     updateWatching()
+    locationChanged()
+  }
+
+  /// The showing tab is somewhere else, or another tab is showing: the path
+  /// bar follows, then the owner.
+  private func locationChanged() {
+    pathBar.update(location: showingBrowser.location, rootName: rootName)
     onLocationChange?()
   }
 
@@ -316,8 +378,13 @@ extension PaneViewController: NSUserInterfaceValidations {
   /// Enables the tab commands only when they can do something.
   public func validateUserInterfaceItem(_ item: any NSValidatedUserInterfaceItem) -> Bool {
     switch item.action {
-    case #selector(showNextTab(_:)), #selector(showPreviousTab(_:)): tabs.tabs.count > 1
-    default: true
+    case #selector(showNextTab(_:)), #selector(showPreviousTab(_:)):
+      return tabs.tabs.count > 1
+    case #selector(togglePathBar(_:)):
+      (item as? NSMenuItem)?.title = showsPathBar ? "Hide Path Bar" : "Show Path Bar"
+      return true
+    default:
+      return true
     }
   }
 }

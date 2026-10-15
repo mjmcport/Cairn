@@ -1,0 +1,57 @@
+import Foundation
+
+/// One name of the path bar: a folder from the root down to the one showing.
+public struct Crumb: Sendable, Equatable {
+  public let title: String
+  public let url: URL
+  /// True for the last crumb, the place being shown.
+  public let isCurrent: Bool
+
+  public init(title: String, url: URL, isCurrent: Bool) {
+    self.title = title
+    self.url = url
+    self.isCurrent = isCurrent
+  }
+}
+
+/// Turns a location into the names the path bar shows. Pure: it makes no
+/// file-system call, so it can run anywhere.
+public enum PathCrumbs {
+  /// What the root folder is called when the caller does not know the name of
+  /// the startup volume.
+  public static let defaultRootName = "Macintosh HD"
+
+  /// The crumbs of `location`, root first. A virtual location is one crumb
+  /// that names the place, since it has no folders above it.
+  public static func crumbs(for location: URL, rootName: String = defaultRootName) -> [Crumb] {
+    if let virtual = VirtualLocation(url: location) {
+      return [Crumb(title: virtual.title, url: location, isCurrent: true)]
+    }
+    // Built from the path's components, not by walking up with
+    // `deletingLastPathComponent`: on macOS 15 that turns "/" into "/../" and
+    // never reaches a parent equal to itself.
+    let components = URL(filePath: location.path(percentEncoded: false)).standardizedFileURL
+      .pathComponents.filter { $0 != "/" }
+    var path = ""
+    var urls = [URL(filePath: "/", directoryHint: .isDirectory)]
+    for component in components {
+      path += "/" + component
+      urls.append(URL(filePath: path, directoryHint: .isDirectory))
+    }
+    return urls.enumerated().map { index, url in
+      let isRoot = index == 0
+      let title = isRoot ? rootName : url.lastPathComponent
+      return Crumb(title: title, url: url, isCurrent: index == urls.count - 1)
+    }
+  }
+}
+
+extension PathCrumbs {
+  /// The name of the startup volume, read off the main thread. Nil when the
+  /// system does not say.
+  public static func startupVolumeName() -> String? {
+    MainThreadGuard.assertOffMainThread()
+    let values = try? URL(filePath: "/").resourceValues(forKeys: [.volumeNameKey])
+    return values?.volumeName
+  }
+}
