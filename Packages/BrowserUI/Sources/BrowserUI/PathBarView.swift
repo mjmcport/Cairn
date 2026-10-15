@@ -36,8 +36,7 @@ public final class PathBarView: NSView {
     apply(.pathBar)
     // A named group, so a screen reader announces it and its names are
     // found inside it.
-    setAccessibilityElement(true)
-    setAccessibilityRole(.group)
+    // bisect: no element/role
     overflowButton.title = "\u{2026}"
     overflowButton.isBordered = false
     overflowButton.target = self

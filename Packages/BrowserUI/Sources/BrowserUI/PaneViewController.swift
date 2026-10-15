@@ -108,12 +108,6 @@ public final class PaneViewController: NSViewController {
     super.viewDidLoad()
     tabBar.onAction = { [weak self] in self?.handle($0) }
     showTabs()
-    Task { [weak self] in
-      let name = await Task.detached { PathCrumbs.startupVolumeName() }.value
-      guard let self, let name else { return }
-      self.rootName = name
-      self.pathBar.update(location: self.showingBrowser.location, rootName: name)
-    }
   }
 
   public override func viewDidAppear() {
