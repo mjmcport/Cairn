@@ -1,5 +1,6 @@
 import AppKit
 import BrowserUI
+import FileSystemCore
 
 /// Builds the menu bar in code. The app has no storyboard or nib.
 @MainActor
@@ -71,6 +72,30 @@ enum MainMenu {
     )
     mainMenu.addItem(submenuItem(titled: "File", menu: fileMenu))
 
+    // The text commands reach a text field, such as the Go to Folder sheet's.
+    // Copy Path has no target: it reaches the showing browser.
+    let editMenu = NSMenu()
+    editMenu.addItem(withTitle: "Undo", action: Selector(("undo:")), keyEquivalent: "z")
+    editMenu.addItem(.separator())
+    editMenu.addItem(withTitle: "Cut", action: #selector(NSText.cut(_:)), keyEquivalent: "x")
+    editMenu.addItem(withTitle: "Copy", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
+    editMenu.addItem(withTitle: "Paste", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
+    editMenu.addItem(
+      withTitle: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
+    editMenu.addItem(.separator())
+    let copyPathMenu = NSMenu(title: "Copy Path")
+    for format in PathFormat.allCases {
+      let item = copyPathMenu.addItem(
+        withTitle: format.title,
+        action: #selector(BrowserViewController.copyPath(_:)),
+        keyEquivalent: format == .path ? "c" : ""
+      )
+      item.tag = format.rawValue
+      if format == .path { item.keyEquivalentModifierMask = [.option, .command] }
+    }
+    editMenu.addItem(submenuItem(titled: "Copy Path", menu: copyPathMenu))
+    mainMenu.addItem(submenuItem(titled: "Edit", menu: editMenu))
+
     let goMenu = NSMenu()
     goMenu.addItem(
       withTitle: "Back",
@@ -88,6 +113,14 @@ enum MainMenu {
       keyEquivalent: String(UnicodeScalar(NSUpArrowFunctionKey)!)
     )
     enclosingFolder.keyEquivalentModifierMask = [.command]
+    goMenu.addItem(.separator())
+    // No target: the pane presents the sheet.
+    let goToFolder = goMenu.addItem(
+      withTitle: "Go to Folder\u{2026}",
+      action: #selector(PaneViewController.goToFolder(_:)),
+      keyEquivalent: "G"
+    )
+    goToFolder.keyEquivalentModifierMask = [.command, .shift]
     mainMenu.addItem(submenuItem(titled: "Go", menu: goMenu))
 
     // Like the Go commands, View has no target: it reaches the showing browser.
@@ -111,6 +144,11 @@ enum MainMenu {
     viewMenu.addItem(
       withTitle: "Keep Folders on Top",
       action: #selector(BrowserViewController.toggleFoldersFirst(_:)),
+      keyEquivalent: ""
+    )
+    viewMenu.addItem(
+      withTitle: "Hide Path Bar",
+      action: #selector(PaneViewController.togglePathBar(_:)),
       keyEquivalent: ""
     )
     // The split view controller handles this, and titles the item Show or

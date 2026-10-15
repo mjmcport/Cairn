@@ -92,6 +92,31 @@ extension AccessibilityElement {
   /// what it speaks: "Eject Backup".
   public static let ejectButton = AccessibilityElement(
     identifier: "eject-button", label: "Eject")
+  public static let pathBar = AccessibilityElement(
+    identifier: "path-bar", label: "Path")
+  /// Every name of the path bar shares this identifier. A name speaks its
+  /// folder: "Folder Documents".
+  public static let pathCrumb = AccessibilityElement(
+    identifier: "path-crumb", label: "Folder")
+  /// Every name's menu button shares this identifier. It speaks the folder
+  /// it opens: "Folders in Documents".
+  public static let pathCrumbMenu = AccessibilityElement(
+    identifier: "path-crumb-menu", label: "Folders in")
+  /// The "…" button that holds the names that do not fit.
+  public static let pathOverflow = AccessibilityElement(
+    identifier: "path-overflow", label: "Earlier folders")
+  public static let goToFolderSheet = AccessibilityElement(
+    identifier: "go-to-folder-sheet", label: "Go to Folder")
+  public static let goToFolderField = AccessibilityElement(
+    identifier: "go-to-folder-field", label: "Folder path")
+  public static let goToFolderSuggestions = AccessibilityElement(
+    identifier: "go-to-folder-suggestions", label: "Matching folders")
+  public static let goToFolderStatus = AccessibilityElement(
+    identifier: "go-to-folder-status", label: "Go to Folder status")
+  public static let goToFolderGoButton = AccessibilityElement(
+    identifier: "go-to-folder-go", label: "Go")
+  public static let goToFolderCancelButton = AccessibilityElement(
+    identifier: "go-to-folder-cancel", label: "Cancel")
   public static let settingsWindow = AccessibilityElement(
     identifier: "settings-window", label: "Settings")
   /// The view that hosts the Settings window's content. The audit reports a
@@ -110,7 +135,9 @@ extension AccessibilityElement {
     .modifiedCell, .addedCell, .iconView, .iconCell, .columnBrowser, .preview, .previewName,
     .previewFact, .backButton, .forwardButton, .tabBar, .tab,
     .closeTabButton, .sidebar, .sidebarHeader, .sidebarItem, .ejectButton,
-    .newTabButton, .settingsWindow,
+    .newTabButton, .pathBar, .pathCrumb, .pathCrumbMenu, .pathOverflow, .goToFolderSheet,
+    .goToFolderField, .goToFolderSuggestions, .goToFolderStatus, .goToFolderGoButton,
+    .goToFolderCancelButton, .settingsWindow,
     .settingsContent, .rememberOpenFoldersToggle,
   ]
 }
