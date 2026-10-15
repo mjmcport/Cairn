@@ -35,7 +35,7 @@ private final class StubCompleter: FolderCompleting, @unchecked Sendable {
   }
 }
 
-@Suite(.disabled("bisect")) @MainActor struct PathBarTests {
+@Suite @MainActor struct PathBarTests {
   private let root = URL(filePath: "/fixture", directoryHint: .isDirectory)
   private let docs = URL(filePath: "/fixture/Docs", directoryHint: .isDirectory)
   private let deep = URL(filePath: "/fixture/Docs/Reports/2026/Q3", directoryHint: .isDirectory)
@@ -194,7 +194,7 @@ private final class StubCompleter: FolderCompleting, @unchecked Sendable {
   }
 }
 
-@Suite(.disabled("bisect")) @MainActor struct CopyPathTests {
+@Suite @MainActor struct CopyPathTests {
   private let root = URL(filePath: "/fixture", directoryHint: .isDirectory)
   private let home = URL(filePath: "/fixture", directoryHint: .isDirectory)
   private let spaced = URL(filePath: "/fixture/My Docs/a b.txt")
@@ -268,7 +268,7 @@ private final class StubCompleter: FolderCompleting, @unchecked Sendable {
   }
 }
 
-@Suite(.disabled("bisect")) @MainActor struct GoToFolderTests {
+@Suite @MainActor struct GoToFolderTests {
   private let base = URL(filePath: "/Users/me/Docs", directoryHint: .isDirectory)
   private let home = URL(filePath: "/Users/me", directoryHint: .isDirectory)
 

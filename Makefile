@@ -81,7 +81,7 @@ test: generate ## Run the script tests, the project-spec checks and every packag
 	@set -e; for package in $(PACKAGES); do \
 		echo "== $$package"; \
 		xcrun swift test --package-path Packages/$$package --scratch-path build/packages/$$package \
-			--no-parallel --skip PerformanceTests $(foreach suite,$(TIMING_SUITES),--skip $(suite)); \
+			--skip PerformanceTests $(foreach suite,$(TIMING_SUITES),--skip $(suite)); \
 	done
 	@set -e; for package in $(TIMING_PACKAGES); do \
 		echo "== $$package (timing tests, alone)"; \

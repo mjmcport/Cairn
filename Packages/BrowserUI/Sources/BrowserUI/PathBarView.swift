@@ -36,7 +36,8 @@ public final class PathBarView: NSView {
     apply(.pathBar)
     // A named group, so a screen reader announces it and its names are
     // found inside it.
-    // bisect: no element/role
+    setAccessibilityElement(true)
+    setAccessibilityRole(.group)
     overflowButton.title = "\u{2026}"
     overflowButton.isBordered = false
     overflowButton.target = self
@@ -57,7 +58,6 @@ public final class PathBarView: NSView {
 
   /// Names for the folders from the root to `location`.
   public func update(location: URL, rootName: String = PathCrumbs.defaultRootName) {
-    if true { return }  // bisect
     let new = PathCrumbs.crumbs(for: location, rootName: rootName)
     guard new != crumbs else { return }
     crumbs = new

@@ -27,16 +27,17 @@ public enum PathCrumbs {
     if let virtual = VirtualLocation(url: location) {
       return [Crumb(title: virtual.title, url: location, isCurrent: true)]
     }
-    var urls: [URL] = []
-    var url = URL(filePath: location.path(percentEncoded: false), directoryHint: .isDirectory)
-      .standardizedFileURL
-    while true {
-      urls.append(url)
-      let parent = url.deletingLastPathComponent()
-      if parent.path(percentEncoded: false) == url.path(percentEncoded: false) { break }
-      url = parent
+    // Built from the path's components, not by walking up with
+    // `deletingLastPathComponent`: on macOS 15 that turns "/" into "/../" and
+    // never reaches a parent equal to itself.
+    let components = URL(filePath: location.path(percentEncoded: false)).standardizedFileURL
+      .pathComponents.filter { $0 != "/" }
+    var path = ""
+    var urls = [URL(filePath: "/", directoryHint: .isDirectory)]
+    for component in components {
+      path += "/" + component
+      urls.append(URL(filePath: path, directoryHint: .isDirectory))
     }
-    urls.reverse()
     return urls.enumerated().map { index, url in
       let isRoot = index == 0
       let title = isRoot ? rootName : url.lastPathComponent
