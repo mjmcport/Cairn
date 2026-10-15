@@ -187,12 +187,19 @@ public final class GoToFolderViewController: NSViewController {
 
   private func finish(_ folder: URL, selecting: Set<URL>) {
     let onGo = onGo
-    dismiss(nil)
+    close()
     onGo?(folder, selecting)
   }
 
   @objc func cancel(_ sender: Any?) {
-    dismiss(nil)
+    close()
+  }
+
+  /// Closes the sheet. A sheet that is not presented has nothing to close:
+  /// `dismiss(_:)` on one is left alone, as AppKit's behavior for it differs
+  /// between macOS versions.
+  private func close() {
+    presentingViewController?.dismiss(self)
   }
 }
 
