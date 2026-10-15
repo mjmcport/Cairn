@@ -208,15 +208,22 @@ private final class StubCompleter: FolderCompleting, @unchecked Sendable {
     return browser
   }
 
-  private func pasteboard() -> NSPasteboard {
-    NSPasteboard(name: NSPasteboard.Name("cairn.tests.\(UUID().uuidString)"))
+  private final class RecordingPasteboard: PathPasteboard {
+    var text: String?
+    var urls: [URL] = []
+    func replace(with text: String, urls: [URL]) {
+      self.text = text
+      self.urls = urls
+    }
   }
+
+  private func pasteboard() -> RecordingPasteboard { RecordingPasteboard() }
 
   @Test func withNothingSelectedItCopiesTheFolder() async {
     let browser = await browser()
     let board = pasteboard()
     browser.copyPaths(as: .path, to: board, home: home)
-    #expect(board.string(forType: .string) == "/fixture")
+    #expect(board.text == "/fixture")
   }
 
   @Test func selectedItemsAreCopiedOnePerLineInEachFormat() async {
@@ -224,16 +231,16 @@ private final class StubCompleter: FolderCompleting, @unchecked Sendable {
     browser.model.selection = [spaced]
     let board = pasteboard()
     browser.copyPaths(as: .escapedPath, to: board, home: home)
-    #expect(board.string(forType: .string) == "/fixture/My\\ Docs/a\\ b.txt")
+    #expect(board.text == "/fixture/My\\ Docs/a\\ b.txt")
     browser.copyPaths(as: .homeRelativePath, to: board, home: home)
-    #expect(board.string(forType: .string) == "~/My Docs/a b.txt")
+    #expect(board.text == "~/My Docs/a b.txt")
     browser.copyPaths(as: .fileURL, to: board, home: home)
-    #expect(board.string(forType: .string) == "file:///fixture/My%20Docs/a%20b.txt")
-    #expect(board.canReadObject(forClasses: [NSURL.self], options: nil))
+    #expect(board.text == "file:///fixture/My%20Docs/a%20b.txt")
+    #expect(board.urls == [spaced])
 
     browser.model.selection = [spaced, plain]
     browser.copyPaths(as: .path, to: board, home: home)
-    let lines = (board.string(forType: .string) ?? "").split(separator: "\n").map(String.init)
+    let lines = (board.text ?? "").split(separator: "\n").map(String.init)
     #expect(Set(lines) == ["/fixture/My Docs/a b.txt", "/fixture/c.txt"])
   }
 
@@ -242,7 +249,7 @@ private final class StubCompleter: FolderCompleting, @unchecked Sendable {
     browser.model.selection = [plain]
     let board = pasteboard()
     browser.copyPaths(as: .path, to: board, home: home)
-    #expect(!board.canReadObject(forClasses: [NSURL.self], options: nil))
+    #expect(board.urls.isEmpty)
   }
 
   @Test func itIsDisabledInAVirtualLocationWithNothingSelected() async {

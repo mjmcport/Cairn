@@ -295,17 +295,13 @@ public final class BrowserViewController: NSViewController {
   /// Puts the paths of ``itemsToCopyPaths`` on `pasteboard` in `format`, a
   /// line for each. Does nothing when there are none.
   public func copyPaths(
-    as format: PathFormat, to pasteboard: NSPasteboard = .general,
+    as format: PathFormat, to pasteboard: any PathPasteboard = SystemPathPasteboard(),
     home: URL = FileManager.default.homeDirectoryForCurrentUser
   ) {
     let urls = itemsToCopyPaths
     guard !urls.isEmpty else { return }
-    pasteboard.clearContents()
-    pasteboard.setString(
-      urls.map { format.string(for: $0, home: home) }.joined(separator: "\n"), forType: .string)
-    if format == .fileURL {
-      pasteboard.writeObjects(urls as [NSURL])
-    }
+    let text = urls.map { format.string(for: $0, home: home) }.joined(separator: "\n")
+    pasteboard.replace(with: text, urls: format == .fileURL ? urls : [])
   }
 
   /// Copies the paths in the format the menu item's tag names. Sent by
