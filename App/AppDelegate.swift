@@ -63,7 +63,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       && WindowFrame.restore(window, named: WindowFrame.autosaveName(suite: launch.suite))
     if !hadSavedFrame { window.center() }
     self.content = content
-    startSaving(content, store: store, settings: settings, launch: launch)
+    startSaving(content, in: window, store: store, settings: settings, launch: launch)
     window.makeKeyAndOrderFront(nil)
     self.window = window
 
@@ -72,7 +72,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   }
 
   private func startSaving(
-    _ content: WindowContentViewController, store: UserDefaultsStateStore,
+    _ content: WindowContentViewController, in window: NSWindow, store: UserDefaultsStateStore,
     settings: BrowserSettings, launch: LaunchRestoration
   ) {
     // A launch with -OpenFolder neither reads nor overwrites saved state.

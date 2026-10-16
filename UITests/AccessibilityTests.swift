@@ -316,6 +316,9 @@ final class AccessibilityTests: XCTestCase {
     let toggle = window.checkBoxes[AccessibilityElement.rememberOpenFoldersToggle.identifier]
     XCTAssertTrue(toggle.exists)
     XCTAssertEqual(toggle.label, AccessibilityElement.rememberOpenFoldersToggle.label)
+    let restores = window.checkBoxes[AccessibilityElement.restoresWindowsToggle.identifier]
+    XCTAssertTrue(restores.exists)
+    XCTAssertEqual(restores.label, AccessibilityElement.restoresWindowsToggle.label)
     // The main window overlaps Settings and is drawn dimmer behind it, so it
     // is closed first and the audit sees the Settings window alone. The app
     // stays running with no window.
