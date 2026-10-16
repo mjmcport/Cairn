@@ -148,10 +148,20 @@ public final class BrowserViewController: NSViewController {
   /// What this tab saves. See ``BrowserModel/captureState()``.
   public func captureState() -> SavedTab { model.captureState() }
 
+  /// Called when something this tab saves may have changed.
+  public var onStateChange: (() -> Void)?
+
+  /// The name the list's column widths, order and visibility are saved
+  /// under, in the user defaults. Set once at launch, before a window is
+  /// built, from the same suite as the rest of the saved state; nil saves
+  /// nothing, as in tests.
+  public static var columnAutosaveName: String?
+
   private init(model: BrowserModel) {
     self.model = model
     let location = model.location
     super.init(nibName: nil, bundle: nil)
+    model.onStateChange = { [weak self] in self?.onStateChange?() }
     // Set here, so a tab that has never been shown already has its title.
     title = Self.title(for: location)
   }
@@ -180,6 +190,11 @@ public final class BrowserViewController: NSViewController {
       }
     }
     outlineView.columnAutoresizingStyle = .firstColumnOnlyAutoresizingStyle
+    if let name = Self.columnAutosaveName {
+      // After the columns exist, so the saved widths and order apply to them.
+      outlineView.autosaveName = name
+      outlineView.autosaveTableColumns = true
+    }
     outlineView.apply(.fileList)
     outlineView.style = .fullWidth
     outlineView.usesAlternatingRowBackgroundColors = true

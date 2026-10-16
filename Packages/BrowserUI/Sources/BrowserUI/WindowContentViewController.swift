@@ -53,6 +53,29 @@ public final class WindowContentViewController: NSSplitViewController {
       self.sidebar.select(location: self.pane.showingBrowser.location)
     }
     sidebar.select(location: pane.showingBrowser.location)
+    pane.onStateChange = { [weak self] in self?.onStateChange?() }
+  }
+
+  /// Called when something the window saves may have changed. The owner
+  /// connects a ``StateSaver`` to it.
+  public var onStateChange: (() -> Void)?
+
+  /// What the window saves: the pane's tabs and the sidebar's width and
+  /// whether it is collapsed.
+  public func captureState() -> SavedWindow {
+    var saved = pane.captureState()
+    if let item = splitViewItems.first, isViewLoaded {
+      saved.sidebarCollapsed = item.isCollapsed
+      // A collapsed sidebar has no width worth keeping.
+      let width = sidebar.view.frame.width
+      saved.sidebarWidth = item.isCollapsed || width <= 0 ? nil : Double(width)
+    }
+    return saved
+  }
+
+  public override func splitViewDidResizeSubviews(_ notification: Notification) {
+    super.splitViewDidResizeSubviews(notification)
+    onStateChange?()
   }
 
   public override func viewDidAppear() {

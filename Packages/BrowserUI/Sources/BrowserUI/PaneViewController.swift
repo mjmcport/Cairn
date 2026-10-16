@@ -225,7 +225,12 @@ public final class PaneViewController: NSViewController {
     setPathBarShown(!showsPathBar)
   }
 
+  /// Called when something the pane saves may have changed: a tab, which tab
+  /// shows, the path bar, or anything a tab saves.
+  public var onStateChange: (() -> Void)?
+
   private func setPathBarShown(_ shown: Bool) {
+    defer { onStateChange?() }
     showsPathBar = shown
     pathBar.isHidden = !shown
     browserBottomAbovePathBar?.isActive = shown
@@ -290,6 +295,7 @@ public final class PaneViewController: NSViewController {
       browser.stopWatching()
       browser.onTitleChange = nil
       browser.onLocationChange = nil
+      browser.onStateChange = nil
       if browser.isViewLoaded {
         browser.view.removeFromSuperview()
       }
@@ -304,6 +310,7 @@ public final class PaneViewController: NSViewController {
   /// while its tab is showing.
   private func adopt(_ browser: BrowserViewController) {
     addChild(browser)
+    browser.onStateChange = { [weak self] in self?.onStateChange?() }
     browser.onTitleChange = { [weak self, weak browser] in
       guard let self, let browser else { return }
       self.updateTabBar()
@@ -321,6 +328,7 @@ public final class PaneViewController: NSViewController {
   /// brought in line, then keyboard focus, in that order, because focus goes
   /// to a view that has to be in the window first.
   private func tabsDidChange() {
+    onStateChange?()
     showTabs()
     restoreFocus()
   }

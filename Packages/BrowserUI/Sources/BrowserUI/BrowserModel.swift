@@ -52,16 +52,25 @@ public final class BrowserModel {
   public private(set) var state: State = .loading
   /// The selected items. The view writes this as the user selects; the model
   /// writes it when a navigation restores an earlier selection.
-  public var selection: Set<URL> = []
+  public var selection: Set<URL> = [] {
+    didSet { if selection != oldValue { onStateChange?() } }
+  }
 
-  public var showsHiddenFiles = false
-  public var sort = FileItemSort()
+  public var showsHiddenFiles = false {
+    didSet { if showsHiddenFiles != oldValue { onStateChange?() } }
+  }
+  public var sort = FileItemSort() {
+    didSet { if sort != oldValue { onStateChange?() } }
+  }
   /// How this browser is presented. A tab's own, like its history.
   public private(set) var viewMode = ViewMode.list
 
   /// Called on the main actor whenever the location, items, state or a
   /// restored selection changes.
   public var onChange: (() -> Void)?
+  /// Called when something a tab saves may have changed: its place, mode,
+  /// sort, hidden files, open folders or selection.
+  public var onStateChange: (() -> Void)?
   /// What the latest call of ``onChange`` was for.
   public private(set) var lastPublish = Publish.load
   /// The open folder the latest ``Publish/folder`` was about.
@@ -306,6 +315,7 @@ public final class BrowserModel {
   private func publish(_ kind: Publish) {
     lastPublish = kind
     onChange?()
+    onStateChange?()
   }
 
   // MARK: Live updates
