@@ -94,7 +94,9 @@ public final class WindowContentViewController: NSSplitViewController {
     if let item = splitViewItems.first, isViewLoaded {
       saved.sidebarCollapsed = item.isCollapsed
       // A collapsed sidebar has no width worth keeping.
-      let width = sidebar.view.frame.width
+      // The split view's own subview: what the divider position sets. The sidebar's
+      // view can sit inside it with an inset, depending on the system.
+      let width = splitView.arrangedSubviews.first?.frame.width ?? 0
       saved.sidebarWidth = item.isCollapsed || width <= 0 ? nil : Double(width)
     }
     return saved

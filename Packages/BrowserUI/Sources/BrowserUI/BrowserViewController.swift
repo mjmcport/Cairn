@@ -169,6 +169,11 @@ public final class BrowserViewController: NSViewController {
   /// nothing, as in tests.
   public static var columnAutosaveName: String?
 
+  /// A name for the tasks it is set in, ahead of ``columnAutosaveName``. A
+  /// test sets it for its own task only, so tests that run at the same time
+  /// do not see each other's name.
+  @TaskLocal public static var columnAutosaveNameOverride: String?
+
   private init(model: BrowserModel) {
     self.model = model
     let location = model.location
@@ -202,7 +207,7 @@ public final class BrowserViewController: NSViewController {
       }
     }
     outlineView.columnAutoresizingStyle = .firstColumnOnlyAutoresizingStyle
-    if let name = Self.columnAutosaveName {
+    if let name = Self.columnAutosaveNameOverride ?? Self.columnAutosaveName {
       // After the columns exist, so the saved widths and order apply to them.
       outlineView.autosaveName = name
       outlineView.autosaveTableColumns = true

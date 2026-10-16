@@ -111,55 +111,53 @@ import Testing
 
   @Test func theListsColumnWidthsAreSavedUnderTheConfiguredName() async throws {
     let name = "StateChangeSignalTests-\(UUID().uuidString)"
-    BrowserViewController.columnAutosaveName = name
-    defer {
-      BrowserViewController.columnAutosaveName = nil
-    }
-    let (content, window) = await window()
-    _ = window
-    let table = try #require(Self.outline(in: content.pane.showingBrowser.view))
-    #expect(table.autosaveName == name)
-    #expect(table.autosaveTableColumns)
+    try await BrowserViewController.$columnAutosaveNameOverride.withValue(name) {
+      let (content, window) = await window()
+      _ = window
+      let table = try #require(Self.outline(in: content.pane.showingBrowser.view))
+      #expect(table.autosaveName == name)
+      #expect(table.autosaveTableColumns)
 
-    let column = try #require(table.tableColumns.last)
-    column.width = 133
-    // The table writes its columns after the resize, not during it.
-    try await Task.sleep(for: .milliseconds(300))
-    let keys = UserDefaults.standard.dictionaryRepresentation().keys.filter { $0.contains(name) }
-    #expect(!keys.isEmpty)
-    for key in keys { UserDefaults.standard.removeObject(forKey: key) }
+      let column = try #require(table.tableColumns.last)
+      column.width = 133
+      // The table writes its columns after the resize, not during it.
+      try await Task.sleep(for: .milliseconds(300))
+      let keys = UserDefaults.standard.dictionaryRepresentation().keys.filter { $0.contains(name) }
+      #expect(!keys.isEmpty)
+      for key in keys { UserDefaults.standard.removeObject(forKey: key) }
+    }
   }
 
   @Test func theSavedSortWinsOverTheTablesOwnAutosavedSortOrdering() async throws {
     let name = "StateChangeSignalTests-sort-\(UUID().uuidString)"
-    BrowserViewController.columnAutosaveName = name
     defer {
-      BrowserViewController.columnAutosaveName = nil
       let defaults = UserDefaults.standard
       for key in defaults.dictionaryRepresentation().keys where key.contains(name) {
         defaults.removeObject(forKey: key)
       }
     }
-    // A first window leaves a different sort ordering in the defaults.
-    let (first, firstWindow) = await window()
-    _ = firstWindow
-    first.pane.showingBrowser.model.changeSort(to: FileItemSort(key: .modificationDate))
-    try await Task.sleep(for: .milliseconds(300))
-    let stored = UserDefaults.standard.dictionaryRepresentation().keys.filter {
-      $0.contains(name) && $0.contains("Sort Ordering")
-    }
-    #expect(!stored.isEmpty)
+    try await BrowserViewController.$columnAutosaveNameOverride.withValue(name) {
+      // A first window leaves a different sort ordering in the defaults.
+      let (first, firstWindow) = await window()
+      _ = firstWindow
+      first.pane.showingBrowser.model.changeSort(to: FileItemSort(key: .modificationDate))
+      try await Task.sleep(for: .milliseconds(300))
+      let stored = UserDefaults.standard.dictionaryRepresentation().keys.filter {
+        $0.contains(name) && $0.contains("Sort Ordering")
+      }
+      #expect(!stored.isEmpty)
 
-    let browser = BrowserViewController(
-      restoring: SavedTab(
-        location: root.absoluteString, sort: SavedSort(key: .size, ascending: false)),
-      location: root, reader: reader(), watcher: nil)
-    _ = browser.view
-    let table = try #require(Self.outline(in: browser.view))
-    let descriptor = try #require(table.sortDescriptors.first)
-    #expect(descriptor.key == "size")
-    #expect(!descriptor.ascending)
-    #expect(browser.model.sort.key == .size)
+      let browser = BrowserViewController(
+        restoring: SavedTab(
+          location: root.absoluteString, sort: SavedSort(key: .size, ascending: false)),
+        location: root, reader: reader(), watcher: nil)
+      _ = browser.view
+      let table = try #require(Self.outline(in: browser.view))
+      let descriptor = try #require(table.sortDescriptors.first)
+      #expect(descriptor.key == "size")
+      #expect(!descriptor.ascending)
+      #expect(browser.model.sort.key == .size)
+    }
   }
 
   private static func outline(in view: NSView) -> NSOutlineView? {

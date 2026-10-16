@@ -141,7 +141,7 @@ import Testing
 
     let (wide, w1) = await makeWindow(SavedWindow(sidebarWidth: 260, tabs: []))
     _ = w1
-    #expect(abs(wide.sidebar.view.frame.width - 260) < 2)
+    #expect(abs((wide.splitView.arrangedSubviews.first?.frame.width ?? 0) - 260) < 2)
     #expect(!(wide.splitViewItems.first?.isCollapsed ?? true))
 
     let (collapsed, w2) = await makeWindow(SavedWindow(sidebarCollapsed: true, tabs: []))
