@@ -135,10 +135,50 @@ public final class BrowserViewController: NSViewController {
     self.init(model: BrowserModel(location: location, reader: reader, watcher: watcher))
   }
 
+  /// A browser on a saved tab: its location, presentation and history.
+  /// Nothing is listed until its view loads, as for any new tab.
+  ///
+  /// With a `resolver`, the saved tab is applied when the view loads, after
+  /// the resolver has said where it can be shown, and the tab lists only
+  /// then. Until then the tab is loading, and it saves the tab it was given
+  /// unchanged.
+  public convenience init(
+    restoring saved: SavedTab, location: URL, reader: any DirectoryReading,
+    watcher: (any FolderWatching)? = nil, resolver: RestoredLocation.Resolver? = nil
+  ) {
+    self.init(location: location, reader: reader, watcher: watcher)
+    if let resolver {
+      unresolved = (saved, resolver)
+    } else {
+      model.restore(saved)
+    }
+  }
+
+  /// A restored tab that is waiting to be resolved, and how.
+  private var unresolved: (tab: SavedTab, resolver: RestoredLocation.Resolver)?
+
+  /// What this tab saves. See ``BrowserModel/captureState()``.
+  public func captureState() -> SavedTab { unresolved?.tab ?? model.captureState() }
+
+  /// Called when something this tab saves may have changed.
+  public var onStateChange: (() -> Void)?
+
+  /// The name the list's column widths, order and visibility are saved
+  /// under, in the user defaults. Set once at launch, before a window is
+  /// built, from the same suite as the rest of the saved state; nil saves
+  /// nothing, as in tests.
+  public static var columnAutosaveName: String?
+
+  /// A name for the tasks it is set in, ahead of ``columnAutosaveName``. A
+  /// test sets it for its own task only, so tests that run at the same time
+  /// do not see each other's name.
+  @TaskLocal public static var columnAutosaveNameOverride: String?
+
   private init(model: BrowserModel) {
     self.model = model
     let location = model.location
     super.init(nibName: nil, bundle: nil)
+    model.onStateChange = { [weak self] in self?.onStateChange?() }
     // Set here, so a tab that has never been shown already has its title.
     title = Self.title(for: location)
   }
@@ -167,6 +207,11 @@ public final class BrowserViewController: NSViewController {
       }
     }
     outlineView.columnAutoresizingStyle = .firstColumnOnlyAutoresizingStyle
+    if let name = Self.columnAutosaveNameOverride ?? Self.columnAutosaveName {
+      // After the columns exist, so the saved widths and order apply to them.
+      outlineView.autosaveName = name
+      outlineView.autosaveTableColumns = true
+    }
     outlineView.apply(.fileList)
     outlineView.style = .fullWidth
     outlineView.usesAlternatingRowBackgroundColors = true
@@ -246,7 +291,18 @@ public final class BrowserViewController: NSViewController {
     model.onChange = { [weak self] in self?.modelDidChange() }
     updateSortIndicator()
     modelDidChange()
-    run { await $0.load() }
+    if let pending = unresolved {
+      run { model in
+        let resolved = await pending.resolver(pending.tab)
+        guard !Task.isCancelled else { return }
+        self.unresolved = nil
+        model.restore(resolved)
+        self.updateSortIndicator()
+        await model.load()
+      }
+    } else {
+      run { await $0.load() }
+    }
   }
 
   public override func viewDidAppear() {

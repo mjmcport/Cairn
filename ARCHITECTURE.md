@@ -118,6 +118,15 @@ Three ways to say where a place is, all through the move the sidebar uses.
 4. **Go to Folder** is a sheet. Each keystroke starts a request with a generation number; an answer for older text is dropped. Nothing moves until Return; a file goes to its folder with the file selected.
 5. **Copy Path** is one action on the browser, reached through the responder chain, with the format in the menu item's tag. It copies the selection, or the folder shown; a File URL also writes a URL.
 
+## How state is restored
+
+What the person set up is kept; what the disk says is read fresh.
+
+1. **One value.** `SavedState` (versioned, Codable) holds windows, each with its tabs (location, view mode, sort, hidden files, open folders, selection, up to 20 history entries each way), the showing tab, the sidebar width and collapse, and the path bar. It is one `Data` blob in the user defaults (`UserDefaultsStateStore`, suite via `-StateSuite`), so saving touches no file. Unknown version or damaged data is ignored and left in place.
+2. **Saved on change.** `StateSaver` collects change signals from the model, the pane's tab list and the split view, and writes after 0.5 s of quiet or 1 s from the first unsaved change. Quit flushes in `applicationShouldTerminate`. A window the person closes clears the blob.
+3. **The system keeps two things.** The window frame (`setFrameAutosaveName`) and the list's column widths (`NSTableView.autosaveName`), both named from the `-StateSuite` value so tests are isolated.
+4. **Restored after the window opens.** `LaunchRestoration` decides whether the blob is read (not with `-OpenFolder`, not with the setting off). The window opens at once; the showing tab is `unresolved` and loading, `RestoredLocation` finds the nearest folder that exists off the main thread (by path components, never parent URLs), and the tab lists once. A removed tag falls back to home. Until a tab resolves it saves the tab it was given, and a tab that has not been shown is not resolved or listed. Back and Forward drop entries whose folder is gone.
+
 ## Tabs
 
 A pane keeps every tab's browser alive as a child view controller, so a tab that is not showing keeps its folder, history, selection, open folders, sort, view mode and scroll position, and finishes a listing it had started. Only the showing tab is watched for changes on disk, and only while the pane is on screen; a tab that is shown again refreshes its list as its watch starts. Closing a tab cancels its listing and stops its watch. Closing the last tab closes the window.

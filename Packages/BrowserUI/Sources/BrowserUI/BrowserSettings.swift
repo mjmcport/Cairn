@@ -11,10 +11,20 @@ public struct BrowserSettings {
   /// The user defaults key of ``rememberOpenFolders``.
   public static let rememberOpenFoldersKey = "RememberOpenFolders"
 
+  /// The user defaults key of ``restoresWindows``.
+  public static let restoresWindowsKey = "RestoreWindows"
+
   private let defaults: UserDefaults
 
   public init(defaults: UserDefaults = .standard) {
     self.defaults = defaults
+  }
+
+  /// Whether Cairn reopens its windows and tabs at launch. On until it is
+  /// turned off.
+  public var restoresWindows: Bool {
+    get { defaults.object(forKey: Self.restoresWindowsKey) as? Bool ?? true }
+    nonmutating set { defaults.set(newValue, forKey: Self.restoresWindowsKey) }
   }
 
   /// Whether Back and Forward open again the folders that were open in the

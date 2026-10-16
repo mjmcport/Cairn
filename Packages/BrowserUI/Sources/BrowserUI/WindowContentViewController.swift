@@ -12,15 +12,34 @@ import FileSystemCore
 public final class WindowContentViewController: NSSplitViewController {
   public let sidebar: SidebarViewController
   public let pane: PaneViewController
+  /// The sidebar's saved width and collapse, applied on the first layout.
+  private var restoring: SavedWindow?
+  private var sidebarItem: NSSplitViewItem?
 
   /// A window on the real file system.
   public convenience init(location: URL) {
     self.init(pane: PaneViewController(location: location), sidebar: SidebarViewController())
   }
 
-  public init(pane: PaneViewController, sidebar: SidebarViewController) {
+  /// A window on the real file system that opens what `restoring` saved, or
+  /// `location` when there is nothing to restore. Each restored tab is
+  /// resolved by `resolver` before it lists.
+  public convenience init(
+    location: URL, restoring: SavedWindow?, resolver: RestoredLocation.Resolver?
+  ) {
+    self.init(
+      pane: PaneViewController(
+        location: location, reader: CompositeReader(), watcher: FolderWatcher(),
+        restoring: restoring, resolver: resolver),
+      sidebar: SidebarViewController(), restoring: restoring)
+  }
+
+  public init(
+    pane: PaneViewController, sidebar: SidebarViewController, restoring: SavedWindow? = nil
+  ) {
     self.pane = pane
     self.sidebar = sidebar
+    self.restoring = restoring
     super.init(nibName: nil, bundle: nil)
   }
 
@@ -39,7 +58,9 @@ public final class WindowContentViewController: NSSplitViewController {
     sidebarItem.maximumThickness = 320
     sidebarItem.canCollapse = true
     sidebarItem.preferredThicknessFraction = 0.18
+    sidebarItem.isCollapsed = restoring?.sidebarCollapsed ?? false
     addSplitViewItem(sidebarItem)
+    self.sidebarItem = sidebarItem
 
     let paneItem = NSSplitViewItem(viewController: pane)
     paneItem.minimumThickness = 400
@@ -53,10 +74,62 @@ public final class WindowContentViewController: NSSplitViewController {
       self.sidebar.select(location: self.pane.showingBrowser.location)
     }
     sidebar.select(location: pane.showingBrowser.location)
+    pane.onStateChange = { [weak self] in self?.onStateChange?() }
+  }
+
+  /// Called when something the window saves may have changed. The owner
+  /// connects a ``StateSaver`` to it.
+  public var onStateChange: (() -> Void)?
+
+  /// What the window saves: the pane's tabs and the sidebar's width and
+  /// whether it is collapsed.
+  public func captureState() -> SavedWindow {
+    var saved = pane.captureState()
+    // Until the saved sidebar is in place, it is what the window saves.
+    if let pending = restoring {
+      saved.sidebarWidth = pending.sidebarWidth
+      saved.sidebarCollapsed = pending.sidebarCollapsed
+      return saved
+    }
+    if let item = splitViewItems.first, isViewLoaded {
+      saved.sidebarCollapsed = item.isCollapsed
+      // A collapsed sidebar has no width worth keeping.
+      // The split view's own subview: what the divider position sets. The sidebar's
+      // view can sit inside it with an inset, depending on the system.
+      let width = splitView.arrangedSubviews.first?.frame.width ?? 0
+      saved.sidebarWidth = item.isCollapsed || width <= 0 ? nil : Double(width)
+    }
+    return saved
+  }
+
+  public override func splitViewDidResizeSubviews(_ notification: Notification) {
+    super.splitViewDidResizeSubviews(notification)
+    onStateChange?()
+  }
+
+  public override func viewDidLayout() {
+    super.viewDidLayout()
+    applySavedSidebarWidth(whenItFits: true)
+  }
+
+  /// Places the divider where it was saved, once. The divider can only go
+  /// where the pane keeps its minimum width, and the window starts narrower
+  /// than it will be, so the first layouts that are too narrow are skipped;
+  /// the first time the window appears it is placed wherever it fits.
+  private func applySavedSidebarWidth(whenItFits: Bool) {
+    guard let saved = restoring, splitView.bounds.width > 0 else { return }
+    let width = min(max(saved.sidebarWidth ?? 0, 150), 320)
+    let needed = width + 400 + splitView.dividerThickness
+    guard !whenItFits || splitView.bounds.width >= needed else { return }
+    restoring = nil
+    if saved.sidebarWidth != nil, !saved.sidebarCollapsed {
+      splitView.setPosition(width, ofDividerAt: 0)
+    }
   }
 
   public override func viewDidAppear() {
     super.viewDidAppear()
+    applySavedSidebarWidth(whenItFits: false)
     // The sidebar is first in the key view loop, and a window gives its
     // first key view the focus when it has none. Keyboard use starts in the
     // list, as it did before there was a sidebar.

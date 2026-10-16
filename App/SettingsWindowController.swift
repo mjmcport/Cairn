@@ -7,6 +7,8 @@ import SwiftUI
 @MainActor
 final class SettingsWindowController {
   private var window: NSWindow?
+  /// Called after the restoration setting changes.
+  var onRestoresWindowsChange: () -> Void = {}
 
   func show() {
     let window = window ?? makeWindow()
@@ -15,7 +17,10 @@ final class SettingsWindowController {
   }
 
   private func makeWindow() -> NSWindow {
-    let hosting = NSHostingController(rootView: SettingsView())
+    let hosting = NSHostingController(
+      rootView: SettingsView(onRestoresWindowsChange: { [weak self] in
+        self?.onRestoresWindowsChange()
+      }))
     hosting.view.apply(.settingsContent)
     let window = NSWindow(contentViewController: hosting)
     window.title = "Settings"

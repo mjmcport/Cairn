@@ -31,6 +31,15 @@ public struct BrowserHistory: Sendable, Equatable {
     self.current = current
   }
 
+  /// A history that already has places to go back and forward to, as one
+  /// read from saved state. Back entries are oldest first, forward entries
+  /// nearest first. Older back entries beyond ``limit`` are dropped.
+  public init(current: URL, back: [Entry], forward: [Entry]) {
+    self.current = current
+    backEntries = Array(back.suffix(Self.limit))
+    forwardEntries = forward
+  }
+
   public var canGoBack: Bool { !backEntries.isEmpty }
   public var canGoForward: Bool { !forwardEntries.isEmpty }
 

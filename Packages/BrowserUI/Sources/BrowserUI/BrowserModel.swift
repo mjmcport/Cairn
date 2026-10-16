@@ -52,16 +52,25 @@ public final class BrowserModel {
   public private(set) var state: State = .loading
   /// The selected items. The view writes this as the user selects; the model
   /// writes it when a navigation restores an earlier selection.
-  public var selection: Set<URL> = []
+  public var selection: Set<URL> = [] {
+    didSet { if selection != oldValue { onStateChange?() } }
+  }
 
-  public var showsHiddenFiles = false
-  public var sort = FileItemSort()
+  public var showsHiddenFiles = false {
+    didSet { if showsHiddenFiles != oldValue { onStateChange?() } }
+  }
+  public var sort = FileItemSort() {
+    didSet { if sort != oldValue { onStateChange?() } }
+  }
   /// How this browser is presented. A tab's own, like its history.
   public private(set) var viewMode = ViewMode.list
 
   /// Called on the main actor whenever the location, items, state or a
   /// restored selection changes.
   public var onChange: (() -> Void)?
+  /// Called when something a tab saves may have changed: its place, mode,
+  /// sort, hidden files, open folders or selection.
+  public var onStateChange: (() -> Void)?
   /// What the latest call of ``onChange`` was for.
   public private(set) var lastPublish = Publish.load
   /// The open folder the latest ``Publish/folder`` was about.
@@ -306,6 +315,7 @@ public final class BrowserModel {
   private func publish(_ kind: Publish) {
     lastPublish = kind
     onChange?()
+    onStateChange?()
   }
 
   // MARK: Live updates
@@ -798,6 +808,58 @@ public final class BrowserModel {
     selection.formUnion(found)
     selectionBaseline = selection
     pendingSelection = pendingSelection.filter { resolveSelection([$0]).isEmpty }
+  }
+
+  // MARK: Saved state
+
+  /// What a tab remembers across launches: where it is and how it is shown.
+  /// Reads only values the model already holds, so it is safe on the main
+  /// actor and never lists anything.
+  public func captureState() -> SavedTab {
+    func strings(_ urls: Set<URL>) -> [String] { urls.map(\.absoluteString).sorted() }
+    func names(_ keys: Set<FolderKey>) -> [[String]] {
+      keys.map(\.names).sorted { $0.lexicographicallyPrecedes($1) }
+    }
+    func entry(_ entry: BrowserHistory.Entry) -> SavedHistoryEntry {
+      SavedHistoryEntry(
+        location: entry.location.absoluteString, selection: strings(entry.selection),
+        openFolders: names(entry.openFolders))
+    }
+    return SavedTab(
+      location: location.absoluteString,
+      viewMode: SavedViewMode(viewMode),
+      sort: SavedSort(sort),
+      showsHidden: showsHiddenFiles,
+      openFolders: names(foldersToRemember),
+      selection: strings(selectionWanted),
+      back: history.backEntries.map(entry),
+      forward: history.forwardEntries.map(entry))
+  }
+
+  /// Puts a saved tab's presentation and history on a model that has not
+  /// listed anything yet. Follow it with ``load()``. The saved location
+  /// becomes the model's own; the caller has already replaced a folder that
+  /// no longer exists (see ``RestoredLocation``).
+  ///
+  /// Open folders are restored in the list only: the icon view has none and
+  /// the column view derives its columns from the selection.
+  public func restore(_ saved: SavedTab) {
+    viewMode = saved.viewMode.browserMode
+    sort = saved.sort.fileItemSort
+    showsHiddenFiles = saved.showsHidden
+    func urls(_ strings: [String]) -> Set<URL> { Set(strings.compactMap { URL(string: $0) }) }
+    func keys(_ names: [[String]]) -> Set<FolderKey> { Set(names.map { FolderKey(names: $0) }) }
+    func entry(_ saved: SavedHistoryEntry) -> BrowserHistory.Entry? {
+      guard let location = URL(string: saved.location) else { return nil }
+      return BrowserHistory.Entry(
+        location: location, selection: urls(saved.selection), openFolders: keys(saved.openFolders))
+    }
+    history = BrowserHistory(
+      current: URL(string: saved.location) ?? history.current,
+      back: saved.back.compactMap(entry),
+      forward: saved.forward.compactMap(entry))
+    selectionToRestore = urls(saved.selection)
+    foldersToRestore = viewMode == .list ? keys(saved.openFolders) : []
   }
 
   // MARK: Mode

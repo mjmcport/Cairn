@@ -12,6 +12,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   private let diagnostics = DiagnosticsSubscriber()
   private let toolbar = BrowserToolbar()
   private let settingsWindow = SettingsWindowController()
+  private var saver: StateSaver?
+  private var content: WindowContentViewController?
+  private var isTerminating = false
 
   static func main() {
     let application = NSApplication.shared
@@ -35,25 +38,70 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       backing: .buffered,
       defer: false
     )
-    let location = InitialLocation.resolve(
-      defaults: .standard,
-      fallback: FileManager.default.homeDirectoryForCurrentUser
-    )
+    let home = FileManager.default.homeDirectoryForCurrentUser
+    let location = InitialLocation.resolve(defaults: .standard, fallback: home)
+    let store = UserDefaultsStateStore.forLaunch()
+    let settings = BrowserSettings()
+    let launch = LaunchRestoration(settings: settings, store: store)
+    // Column widths are kept by the table, under a name from the same suite.
+    BrowserViewController.columnAutosaveName =
+      "CairnList" + (launch.suite.map { "-\($0)" } ?? "")
     // The pane, inside the split view, titles the window with the showing
     // tab's folder name.
-    window.contentViewController = WindowContentViewController(location: location)
+    let content = WindowContentViewController(
+      location: location, restoring: launch.window,
+      resolver: launch.isActive ? RestoredLocation(home: home).resolver : nil)
+    window.contentViewController = content
     // The list's columns fit 900 points beside a sidebar of about 200.
     window.setContentSize(NSSize(width: 1100, height: 600))
     window.apply(.mainWindow)
     window.toolbar = toolbar.makeToolbar()
     window.toolbarStyle = .unified
     window.isReleasedWhenClosed = false
-    window.center()
+    let hadSavedFrame =
+      launch.isActive
+      && WindowFrame.restore(window, named: WindowFrame.autosaveName(suite: launch.suite))
+    if !hadSavedFrame { window.center() }
+    self.content = content
+    startSaving(content, in: window, store: store, settings: settings, launch: launch)
     window.makeKeyAndOrderFront(nil)
     self.window = window
 
     NSApp.activate()
     Log.lifecycle.info("Launched")
+  }
+
+  private func startSaving(
+    _ content: WindowContentViewController, in window: NSWindow, store: UserDefaultsStateStore,
+    settings: BrowserSettings, launch: LaunchRestoration
+  ) {
+    // A launch with -OpenFolder neither reads nor overwrites saved state.
+    guard !launch.hasNamedFolder else { return }
+    let saver = StateSaver(
+      store: store,
+      isEnabled: { settings.restoresWindows },
+      capture: { [weak content] in
+        content.map { SavedState(windows: [$0.captureState()]) }
+      })
+    content.onStateChange = { saver.noteChange() }
+    settingsWindow.onRestoresWindowsChange = { saver.settingChanged() }
+    self.saver = saver
+    // A window the person closes is not brought back at the next launch.
+    NotificationCenter.default.addObserver(
+      forName: NSWindow.willCloseNotification, object: window, queue: .main
+    ) { [weak self] _ in
+      MainActor.assumeIsolated {
+        guard let self, !self.isTerminating else { return }
+        self.saver?.windowClosed()
+      }
+    }
+  }
+
+  func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+    // Before any window closes: a quit saves what is on screen.
+    isTerminating = true
+    saver?.flush()
+    return .terminateNow
   }
 
   /// Command-W when no pane is in the responder chain, as with the About
