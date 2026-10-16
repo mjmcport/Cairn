@@ -164,6 +164,20 @@ import Testing
     #expect(rig.store.data != nil)
   }
 
+  @Test func aClosedWindowIsForgottenAndNothingMoreIsSaved() {
+    let rig = rig()
+    rig.saver.noteChange()
+    rig.clock.fire(quiet)
+    #expect(rig.store.data != nil)
+    rig.saver.noteChange()
+    rig.saver.windowClosed()
+    #expect(rig.store.data == nil)
+    #expect(rig.clock.timers.isEmpty)
+    rig.saver.noteChange()
+    rig.saver.flush()
+    #expect(rig.store.data == nil)
+  }
+
   @Test func theSettingDefaultsToOn() throws {
     let name = "StateSaverTests-\(UUID().uuidString)"
     let defaults = try #require(UserDefaults(suiteName: name))

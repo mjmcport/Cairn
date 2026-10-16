@@ -837,9 +837,9 @@ public final class BrowserModel {
   }
 
   /// Puts a saved tab's presentation and history on a model that has not
-  /// listed anything yet. Follow it with ``load()``. The location is the
-  /// model's own: the caller built the model on it, possibly after
-  /// replacing a folder that no longer exists.
+  /// listed anything yet. Follow it with ``load()``. The saved location
+  /// becomes the model's own; the caller has already replaced a folder that
+  /// no longer exists (see ``RestoredLocation``).
   ///
   /// Open folders are restored in the list only: the icon view has none and
   /// the column view derives its columns from the selection.
@@ -855,7 +855,8 @@ public final class BrowserModel {
         location: location, selection: urls(saved.selection), openFolders: keys(saved.openFolders))
     }
     history = BrowserHistory(
-      current: history.current, back: saved.back.compactMap(entry),
+      current: URL(string: saved.location) ?? history.current,
+      back: saved.back.compactMap(entry),
       forward: saved.forward.compactMap(entry))
     selectionToRestore = urls(saved.selection)
     foldersToRestore = viewMode == .list ? keys(saved.openFolders) : []

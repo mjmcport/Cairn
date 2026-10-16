@@ -65,7 +65,7 @@ public final class PaneViewController: NSViewController {
   /// is used when there is nothing to restore.
   public init(
     location: URL, reader: any DirectoryReading, watcher: (any FolderWatching)? = nil,
-    restoring: SavedWindow?
+    restoring: SavedWindow?, resolver: RestoredLocation.Resolver? = nil
   ) {
     self.reader = reader
     self.watcher = watcher
@@ -76,7 +76,8 @@ public final class PaneViewController: NSViewController {
         // A tab whose location cannot be read is dropped, not shown empty.
         guard let url = URL(string: tab.location) else { continue }
         browsers.append(
-          BrowserViewController(restoring: tab, location: url, reader: reader, watcher: watcher))
+          BrowserViewController(
+            restoring: tab, location: url, reader: reader, watcher: watcher, resolver: resolver))
       }
       showing = saved.validShowingIndex
     }

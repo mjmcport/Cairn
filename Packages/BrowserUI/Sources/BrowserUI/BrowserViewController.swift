@@ -137,16 +137,28 @@ public final class BrowserViewController: NSViewController {
 
   /// A browser on a saved tab: its location, presentation and history.
   /// Nothing is listed until its view loads, as for any new tab.
+  ///
+  /// With a `resolver`, the saved tab is applied when the view loads, after
+  /// the resolver has said where it can be shown, and the tab lists only
+  /// then. Until then the tab is loading, and it saves the tab it was given
+  /// unchanged.
   public convenience init(
     restoring saved: SavedTab, location: URL, reader: any DirectoryReading,
-    watcher: (any FolderWatching)? = nil
+    watcher: (any FolderWatching)? = nil, resolver: RestoredLocation.Resolver? = nil
   ) {
     self.init(location: location, reader: reader, watcher: watcher)
-    model.restore(saved)
+    if let resolver {
+      unresolved = (saved, resolver)
+    } else {
+      model.restore(saved)
+    }
   }
 
+  /// A restored tab that is waiting to be resolved, and how.
+  private var unresolved: (tab: SavedTab, resolver: RestoredLocation.Resolver)?
+
   /// What this tab saves. See ``BrowserModel/captureState()``.
-  public func captureState() -> SavedTab { model.captureState() }
+  public func captureState() -> SavedTab { unresolved?.tab ?? model.captureState() }
 
   /// Called when something this tab saves may have changed.
   public var onStateChange: (() -> Void)?
@@ -274,7 +286,18 @@ public final class BrowserViewController: NSViewController {
     model.onChange = { [weak self] in self?.modelDidChange() }
     updateSortIndicator()
     modelDidChange()
-    run { await $0.load() }
+    if let pending = unresolved {
+      run { model in
+        let resolved = await pending.resolver(pending.tab)
+        guard !Task.isCancelled else { return }
+        self.unresolved = nil
+        model.restore(resolved)
+        self.updateSortIndicator()
+        await model.load()
+      }
+    } else {
+      run { await $0.load() }
+    }
   }
 
   public override func viewDidAppear() {

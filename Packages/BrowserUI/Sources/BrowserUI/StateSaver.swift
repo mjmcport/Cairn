@@ -40,6 +40,8 @@ public final class StateSaver {
   private var cancelQuiet: (() -> Void)?
   private var cancelLongest: (() -> Void)?
   private var lastWritten: Data?
+  /// Set when the person closed the window: what it showed is not kept.
+  private var isClosed = false
   /// How many times the store was written. For tests.
   public private(set) var writeCount = 0
 
@@ -66,7 +68,7 @@ public final class StateSaver {
 
   /// Something in the saved state may have changed.
   public func noteChange() {
-    guard isEnabled() else { return }
+    guard isEnabled(), !isClosed else { return }
     cancelQuiet?()
     cancelQuiet = schedule(quiet) { [weak self] in self?.write() }
     if cancelLongest == nil {
@@ -93,6 +95,15 @@ public final class StateSaver {
     }
   }
 
+  /// The person closed the window: a later launch starts fresh, and nothing
+  /// more is saved.
+  public func windowClosed() {
+    isClosed = true
+    stopTimers()
+    store.clear()
+    lastWritten = nil
+  }
+
   private func stopTimers() {
     cancelQuiet?()
     cancelLongest?()
@@ -102,7 +113,7 @@ public final class StateSaver {
 
   private func write() {
     stopTimers()
-    guard isEnabled(), let state = capture(), let data = state.encoded() else { return }
+    guard isEnabled(), !isClosed, let state = capture(), let data = state.encoded() else { return }
     guard data != lastWritten else { return }
     store.save(data)
     lastWritten = data

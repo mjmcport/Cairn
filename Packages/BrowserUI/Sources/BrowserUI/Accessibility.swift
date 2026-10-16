@@ -127,6 +127,10 @@ extension AccessibilityElement {
     identifier: "setting-remember-open-folders",
     label: "Open folders again when going back or forward")
 
+  public static let restoresWindowsToggle = AccessibilityElement(
+    identifier: "setting-restores-windows",
+    label: "Reopen windows and tabs when Cairn starts")
+
   /// Every element the app declares. Tests check that identifiers are unique
   /// and labels are present.
   public static let all: [AccessibilityElement] = [
@@ -138,7 +142,7 @@ extension AccessibilityElement {
     .newTabButton, .pathBar, .pathCrumb, .pathCrumbMenu, .pathOverflow, .goToFolderSheet,
     .goToFolderField, .goToFolderSuggestions, .goToFolderStatus, .goToFolderGoButton,
     .goToFolderCancelButton, .settingsWindow,
-    .settingsContent, .rememberOpenFoldersToggle,
+    .settingsContent, .rememberOpenFoldersToggle, .restoresWindowsToggle,
   ]
 }
 
