@@ -800,6 +800,57 @@ public final class BrowserModel {
     pendingSelection = pendingSelection.filter { resolveSelection([$0]).isEmpty }
   }
 
+  // MARK: Saved state
+
+  /// What a tab remembers across launches: where it is and how it is shown.
+  /// Reads only values the model already holds, so it is safe on the main
+  /// actor and never lists anything.
+  public func captureState() -> SavedTab {
+    func strings(_ urls: Set<URL>) -> [String] { urls.map(\.absoluteString).sorted() }
+    func names(_ keys: Set<FolderKey>) -> [[String]] {
+      keys.map(\.names).sorted { $0.lexicographicallyPrecedes($1) }
+    }
+    func entry(_ entry: BrowserHistory.Entry) -> SavedHistoryEntry {
+      SavedHistoryEntry(
+        location: entry.location.absoluteString, selection: strings(entry.selection),
+        openFolders: names(entry.openFolders))
+    }
+    return SavedTab(
+      location: location.absoluteString,
+      viewMode: SavedViewMode(viewMode),
+      sort: SavedSort(sort),
+      showsHidden: showsHiddenFiles,
+      openFolders: names(foldersToRemember),
+      selection: strings(selectionWanted),
+      back: history.backEntries.map(entry),
+      forward: history.forwardEntries.map(entry))
+  }
+
+  /// Puts a saved tab's presentation and history on a model that has not
+  /// listed anything yet. Follow it with ``load()``. The location is the
+  /// model's own: the caller built the model on it, possibly after
+  /// replacing a folder that no longer exists.
+  ///
+  /// Open folders are restored in the list only: the icon view has none and
+  /// the column view derives its columns from the selection.
+  public func restore(_ saved: SavedTab) {
+    viewMode = saved.viewMode.browserMode
+    sort = saved.sort.fileItemSort
+    showsHiddenFiles = saved.showsHidden
+    func urls(_ strings: [String]) -> Set<URL> { Set(strings.compactMap { URL(string: $0) }) }
+    func keys(_ names: [[String]]) -> Set<FolderKey> { Set(names.map { FolderKey(names: $0) }) }
+    func entry(_ saved: SavedHistoryEntry) -> BrowserHistory.Entry? {
+      guard let location = URL(string: saved.location) else { return nil }
+      return BrowserHistory.Entry(
+        location: location, selection: urls(saved.selection), openFolders: keys(saved.openFolders))
+    }
+    history = BrowserHistory(
+      current: history.current, back: saved.back.compactMap(entry),
+      forward: saved.forward.compactMap(entry))
+    selectionToRestore = urls(saved.selection)
+    foldersToRestore = viewMode == .list ? keys(saved.openFolders) : []
+  }
+
   // MARK: Mode
 
   /// Shows the folder as `mode`. Switching to icons closes every folder that

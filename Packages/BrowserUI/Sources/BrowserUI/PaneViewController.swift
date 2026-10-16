@@ -54,14 +54,51 @@ public final class PaneViewController: NSViewController {
 
   /// A pane whose tabs list through `reader`. They watch nothing unless the
   /// pane is also given a watcher.
-  public init(location: URL, reader: any DirectoryReading, watcher: (any FolderWatching)? = nil) {
+  public convenience init(
+    location: URL, reader: any DirectoryReading, watcher: (any FolderWatching)? = nil
+  ) {
+    self.init(location: location, reader: reader, watcher: watcher, restoring: nil)
+  }
+
+  /// A pane that opens the tabs of `restoring`, in order, with the saved one
+  /// showing. Only the showing tab lists, when its view loads. `location`
+  /// is used when there is nothing to restore.
+  public init(
+    location: URL, reader: any DirectoryReading, watcher: (any FolderWatching)? = nil,
+    restoring: SavedWindow?
+  ) {
     self.reader = reader
     self.watcher = watcher
-    let browser = BrowserViewController(location: location, reader: reader, watcher: watcher)
-    tabs = TabList(browser)
+    var browsers: [BrowserViewController] = []
+    var showing = 0
+    if let saved = restoring, !saved.tabs.isEmpty {
+      for tab in saved.tabs {
+        // A tab whose location cannot be read is dropped, not shown empty.
+        guard let url = URL(string: tab.location) else { continue }
+        browsers.append(
+          BrowserViewController(restoring: tab, location: url, reader: reader, watcher: watcher))
+      }
+      showing = saved.validShowingIndex
+    }
+    if browsers.isEmpty {
+      browsers = [BrowserViewController(location: location, reader: reader, watcher: watcher)]
+      showing = 0
+    }
+    tabs = TabList(tabs: browsers, showingIndex: showing)!
     super.init(nibName: nil, bundle: nil)
-    adopt(browser)
-    title = browser.title
+    for browser in browsers { adopt(browser) }
+    title = tabs.showing.title
+    if let saved = restoring, !saved.showsPathBar {
+      setPathBarShown(false)
+    }
+  }
+
+  /// What the pane saves: its tabs, which one shows, and the path bar. The
+  /// sidebar's part is filled in by the window's content.
+  public func captureState() -> SavedWindow {
+    SavedWindow(
+      showsPathBar: showsPathBar, tabs: tabs.tabs.map { $0.captureState() },
+      showingIndex: tabs.showingIndex)
   }
 
   @available(*, unavailable)
@@ -100,7 +137,9 @@ public final class PaneViewController: NSViewController {
       equalTo: pathBar.topAnchor)
     browserBottomAtPaneBottom = browserContainer.bottomAnchor.constraint(
       equalTo: container.bottomAnchor)
-    browserBottomAbovePathBar?.isActive = true
+    browserBottomAbovePathBar?.isActive = showsPathBar
+    browserBottomAtPaneBottom?.isActive = !showsPathBar
+    pathBar.isHidden = !showsPathBar
     view = container
   }
 
@@ -183,10 +222,14 @@ public final class PaneViewController: NSViewController {
 
   /// Shows or hides the path bar. Sent by View > Hide Path Bar.
   @objc public func togglePathBar(_ sender: Any?) {
-    showsPathBar.toggle()
-    pathBar.isHidden = !showsPathBar
-    browserBottomAbovePathBar?.isActive = showsPathBar
-    browserBottomAtPaneBottom?.isActive = !showsPathBar
+    setPathBarShown(!showsPathBar)
+  }
+
+  private func setPathBarShown(_ shown: Bool) {
+    showsPathBar = shown
+    pathBar.isHidden = !shown
+    browserBottomAbovePathBar?.isActive = shown
+    browserBottomAtPaneBottom?.isActive = !shown
   }
 
   /// Opens the Go to Folder sheet on the showing tab. Sent by Go > Go to Folder.

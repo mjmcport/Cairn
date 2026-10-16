@@ -135,6 +135,19 @@ public final class BrowserViewController: NSViewController {
     self.init(model: BrowserModel(location: location, reader: reader, watcher: watcher))
   }
 
+  /// A browser on a saved tab: its location, presentation and history.
+  /// Nothing is listed until its view loads, as for any new tab.
+  public convenience init(
+    restoring saved: SavedTab, location: URL, reader: any DirectoryReading,
+    watcher: (any FolderWatching)? = nil
+  ) {
+    self.init(location: location, reader: reader, watcher: watcher)
+    model.restore(saved)
+  }
+
+  /// What this tab saves. See ``BrowserModel/captureState()``.
+  public func captureState() -> SavedTab { model.captureState() }
+
   private init(model: BrowserModel) {
     self.model = model
     let location = model.location
