@@ -39,6 +39,7 @@ Twelve steps that produce almost nothing you can see, and everything the visible
 | 7 | [Following the path](phase-1-step-07-column-view.md) | Reuse the structure you already built; a click is a request; probe the old part before building on it |
 | 8 | [The directory in the lobby](phase-1-step-08-sidebar.md) | A new place can be a new address; say what is wrong; give a test its own world |
 | 9 | [An address read from the country down](phase-1-step-09-path-bar.md) | A row of folder names, a sheet that completes a typed path, and four ways to copy one |
+| 10 | [Picking up where you left off](phase-1-step-10-state-restoration.md) | Save as you go, not at the end; open first and look second; a test that acts like a person finds what part tests cannot |
 
 ## Ideas that keep coming back
 
